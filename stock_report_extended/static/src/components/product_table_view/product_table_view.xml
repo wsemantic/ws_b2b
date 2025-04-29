@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="stock_report_extended.Component" owl="1">
+        <div class="main-haeder w-100 d-flex justify-content-between p-3">
+            <span class="page-name-header-text">Stock Analysis Table View</span>
+
+            <div class="searchbar-container-class">
+                <div class="search-container d-flex align-items-center">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fa fa-search"></i>
+                        </span>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            placeholder="Search products..."
+                            t-on-input="(ev) => this.onSearchInput(ev.target.value)"
+                            t-ref="searchInput"
+                        />
+                        <button class="btn btn-outline-secondary" type="button" t-on-click="() => this.clearSearch()">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="ms-2">
+                        <select class="form-select w-auto" t-on-change="(ev) => this.onFilterChange(ev.target.value)">
+                            <option value="all">All Products</option>
+                            <option value="available">Available</option>
+                            <option value="reserved">Reserved</option>
+                            <option value="replenishment">Replenishment</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="o_product_attribute_matrix">
+            <div t-if="state.loading" class="text-center p-5">
+                <i class="fa fa-spinner fa-spin fa-2x"/>
+                <p class="mt-2">Loading product data...</p>
+            </div>
+            
+            <div t-if="!state.loading and (!state.data || !state.data.products || state.data.products.length === 0)" 
+                 class="text-center p-5">
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"/>
+                    No product data available. Please check your inventory configuration.
+                </div>
+            </div>
+            
+            <div t-if="!state.loading and state.data and state.data.products and state.data.products.length > 0" 
+                 class="product-matrix-container p-2">
+                <div class="table-responsive">
+                    <table class="table table-bordered main-table">
+                        <thead>
+                            <tr>
+                                <th class="product-image-header text-center">Product Image</th>
+                                <th class="product-name-header text-center">Product Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-if="getFilteredProducts().length > 0">
+                                <t t-foreach="getFilteredProducts()" t-as="product" t-key="product.id">
+                                    <tr class="product-row">
+                                        <td class="product-image-cell">
+                                            <div class="product-image-container">
+                                                <img t-if="getSelectedVariantImage(product)" 
+                                                    t-att-src="getSelectedVariantImage(product)" 
+                                                    class="img-fluid rounded-3" alt="Product"/>
+                                            </div>
+                                        </td>
+                                        
+                                        <td class="product-name-cell">
+                                            <div class="product-attributes-container mt-3">
+                                                <div class="collapsible-row mb-2">
+                                                    <div class="row align-items-center">
+                                                        <div class="col-12">
+                                                            <div class="attribute-table-container">
+                                                                <table class="table table-bordered inner-table mb-0">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th class="attribute-type-cell text-center text-danger">
+                                                                                <strong><t t-esc="product.name"/></strong>
+                                                                            </th>
+                                                                            <th t-foreach="getProductSizes(product)" t-as="size" t-key="size"
+                                                                                class="size-header-cell text-center">
+                                                                                <t t-esc="size"/>
+                                                                            </th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        <t t-foreach="getProductColors(product)" t-as="color" t-key="color.name">
+                                                                            <tr>
+                                                                                <td class="color-name-cell">
+                                                                                    <t t-esc="color.name"/>
+                                                                                </td>
+                                                                                <t t-foreach="getProductSizes(product)" t-as="size" t-key="size">
+                                                                                    <t t-set="variant" t-value="getVariantByAttributes(product, color.name, size)"/>
+                                                                                    <t t-set="quantity" t-value="formatQuantity(variant)"/>
+                                                                                    
+                                                                                    <t t-if="quantity.value !== '-'">
+                                                                                        <td class="quantity-cell-container text-center"
+                                                                                            t-on-click="() => this.showVariantDetails(product, color.name, size)">
+                                                                                            <div t-attf-class="quantity-cell {{ quantity.class }}">
+                                                                                                <t t-esc="quantity.value"/>
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </t>
+
+                                                                                    <t t-else="">
+                                                                                        <td class="quantity-cell-container text-center" style="cursor: default;">
+                                                                                            <div class="quantity-cell no-quantity">-</div>
+                                                                                        </td>
+                                                                                    </t>
+                                                                                </t>
+                                                                            </tr>
+                                                                        </t>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </t>
+                            </t>
+                            <t t-else="">
+                                <tr>
+                                    <td colspan="2">
+                                        <div class="no-products-found-div text-center p-4 text-muted">
+                                            <i class="fa fa-box-open fa-2x mb-2" aria-hidden="true"></i>
+                                            <p class="mb-0 fw-bold fs-lg">No products available to show here.</p>
+                                            <p class="mb-0 fw-bold fs-lg">or</p>
+                                            <p class="mb-0 fw-bold fs-lg">No products found matching your filters.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </t>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-3 d-flex justify-content-center footer-legend">
+                    <div class="legend-item me-3">
+                        <span class="legend-color qty-available"></span>
+                        <span class="legend-text on-hand-row">On Hand / Available quantity</span>
+                    </div>
+                    <div class="legend-item me-3">
+                        <span class="legend-color qty-reserved"></span>
+                        <span class="legend-text reserved-row">Reserved quantity</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color qty-replenishment"></span>
+                        <span class="legend-text incoming-row">Replenishment / Incoming quantity</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Variant Details Modal -->
+        <div t-if="state.showVariantModal" class="modal fade show d-block" role="dialog">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content shadow rounded-3">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title fw-semibold">
+                            <t t-esc="state.selectedVariant.product.name"/> - 
+                            <div class="title-product-attribute">[
+                                <t t-esc="state.selectedVariant.color"/> / 
+                                <t t-esc="state.selectedVariant.size"/>
+                            ]
+                            </div>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" aria-label="Close" t-on-click="() => this.closeVariantModal()"></button>
+                    </div>
+                    <div class="modal-body py-4">
+                        <div class="row g-4 align-items-start">
+                            <!-- Image Section -->
+                            <div class="col-md-4 border-end">
+                                <div class="d-flex justify-content-center align-items-center h-100">
+                                    <img t-if="state.selectedVariant.image" 
+                                        t-att-src="state.selectedVariant.image" 
+                                        class="img-fluid rounded border" 
+                                        alt="Variant"/>
+                                    <div t-if="!state.selectedVariant.image" class="w-100 text-center py-5 bg-light border rounded">
+                                        <span class="text-muted">No Image Available</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Details Table -->
+                            <div class="col-md-8">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle text-center mb-0 product-details-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th scope="col">Quantity Type</th>
+                                                <th scope="col">Value</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td class="on-hand-row">On Hand</td>
+                                                <td>
+                                                    <div class="quantity-cell qty-available">
+                                                        <t t-esc="state.selectedVariant.qty"/>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="reserved-row">Reserved</td>
+                                                <td>
+                                                    <div class="quantity-cell qty-reserved">
+                                                        <t t-esc="state.selectedVariant.reserved_qty"/>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="incoming-row">Incoming</td>
+                                                <td>
+                                                    <div class="quantity-cell qty-replenishment">
+                                                        <t t-esc="state.selectedVariant.incoming_qty"/>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td class="outgoing-row">Outgoing</td>
+                                                <td>
+                                                    <div class="quantity-cell qty-normal">
+                                                        <t t-esc="state.selectedVariant.outgoing_qty"/>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Backdrop -->
+        <div t-if="state.showVariantModal" class="modal-backdrop fade show"></div>
+    </t>
+</templates>
