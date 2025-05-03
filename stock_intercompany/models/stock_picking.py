@@ -33,7 +33,7 @@ class StockPicking(models.Model):
                 .search([("company_id", "=", company.id)], limit=1)
             )
         ptype = company.intercompany_in_type_id or warehouse.in_type_id
-        move_ids, move_line_ids = self._check_company_consistency(company)
+        move_ids, move_line_ids = self._check_company_consistency(company, warehouse)
         return {
             "partner_id": self.env.user.company_id.partner_id.id,
             "company_id": company.id,
@@ -48,11 +48,14 @@ class StockPicking(models.Model):
             "move_line_ids": move_line_ids,
         }
 
-    def _check_company_consistency(self, company):
+    def _check_company_consistency(self, company, warehouse):
         # Replace company_id by the right one to create the counterpart picking
+        ptype = company.intercompany_in_type_id or warehouse.in_type_id
         common_vals = {
             "company_id": company.id,
+            "picking_type_id": ptype.id,
             "location_id": self.env.ref("stock.stock_location_suppliers").id,
+            "location_dest_id": ptype.default_location_dest_id.id
         }
         move_ids = [
             (
