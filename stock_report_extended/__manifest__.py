@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 {
     'name': "Stock Report Extended",
+
     'summary': "Product attribute grouping report for stock module",
+
     'description': """
 This module extends the stock module reports with a custom list view that:
 - Groups products by their attributes (color, size, etc.)
@@ -9,19 +11,24 @@ This module extends the stock module reports with a custom list view that:
 - Allows real-time exploration of inventory by attribute
 - Color-codes stock status (in stock, reserved, replenishment)
     """,
+
+    'author': "Atharva Systems",
+    'website': "https://www.atharvasystems.com",
     'category': 'Inventory/Reporting',
     'version': '1.0',
+
     'depends': [
         'base',
         'stock',
         'product',
         'web',
     ],
+
     'data': [
         'security/ir.model.access.csv',
-        'views/product_attribute_report_views.xml',
         'views/menu_views.xml',
     ],
+    
     'assets': {
         'web.assets_backend': [
             '/stock_report_extended/static/src/images/no-image-found.png',
