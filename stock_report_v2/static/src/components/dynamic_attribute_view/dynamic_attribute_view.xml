@@ -269,7 +269,8 @@
                                                 </thead>
                                                 <tbody>
                                                     <tr>
-                                                        <td>On Hand</td>
+                                                        <td t-if="state.config &amp;&amp; state.config.use_forecast">Forecasted</td>
+                                                        <td t-else="">On Hand</td>
                                                         <td class="text-center">
                                                             <td t-esc="formatQty(state.selectedVariant.qty)"></td>
                                                         </td>
