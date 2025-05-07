@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- List View -->
+    <record id="view_stock_report_config_tree" model="ir.ui.view">
+        <field name="name">stock.report.config.tree</field>
+        <field name="model">stock.report.config</field>
+        <field name="arch" type="xml">
+            <tree string="Stock Report Configurations">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="primary_attribute_id"/>
+                <field name="secondary_attribute_id"/>
+                <field name="parent_menu_id"/>
+                <field name="use_forecast"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_stock_report_config_form" model="ir.ui.view">
+        <field name="name">stock.report.config.form</field>
+        <field name="model">stock.report.config</field>
+        <field name="arch" type="xml">
+            <form string="Stock Report Configuration">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="e.g. Size and Color Report"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="primary_attribute_id" required="1"/>
+                            <field name="secondary_attribute_id" required="1"/>
+                            <field name="sequence"/>
+                            <field name="parent_menu_id"/>
+                        </group>
+                        <group>
+                            <field name="use_forecast"/>
+                            <field name="filter_zero"/>
+                            <field name="include_negative"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <field name="menu_id" invisible="1"/>
+                    <field name="action_id" invisible="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="view_stock_report_config_search" model="ir.ui.view">
+        <field name="name">stock.report.config.search</field>
+        <field name="model">stock.report.config</field>
+        <field name="arch" type="xml">
+            <search string="Stock Report Configurations">
+                <field name="name"/>
+                <field name="primary_attribute_id"/>
+                <field name="secondary_attribute_id"/>
+                <field name="parent_menu_id"/>
+                <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <group expand="0" string="Group By">
+                    <filter string="Parent Menu" name="parent_menu" context="{'group_by': 'parent_menu_id'}"/>
+                    <filter string="Primary Attribute" name="primary_attr" context="{'group_by': 'primary_attribute_id'}"/>
+                    <filter string="Secondary Attribute" name="secondary_attr" context="{'group_by': 'secondary_attribute_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_stock_report_config" model="ir.actions.act_window">
+        <field name="name">Stock Report Configurations</field>
+        <field name="res_model">stock.report.config</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a new stock report configuration
+            </p>
+            <p>
+                Create custom stock report views based on product attributes.
+                Each configuration will create a menu item that displays products
+                filtered by the selected attributes.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="menu_stock_report_config"
+        name="Attribute Report Configs"
+        action="action_stock_report_config"
+        parent="stock.menu_stock_config_settings"
+        sequence="20"/>
+</odoo> 

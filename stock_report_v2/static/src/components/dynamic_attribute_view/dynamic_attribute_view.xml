@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="stock_report_v2.DynamicAttributeView" owl="1">
+        <Layout t-props="layoutProps">
+            <div class="o_dynamic_attribute_view">
+                <div class="o_main_header d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <h2 class="o_page_title m-0">
+                            <t t-esc="state.config ? state.config.name : ''"/>
+                        </h2>
+                        <small t-if="state.config &amp;&amp; state.config.use_forecast" class="text-muted">
+                            Showing forecasted quantities
+                        </small>
+                        <small t-else="" class="text-muted">
+                            Showing on-hand quantities
+                        </small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="o_search_container">
+                            <div class="o_search_panel input-group">
+                                <input type="text" class="form-control" t-att-value="state.searchInput" t-on-input="onSearchInput" placeholder="Search products..." aria-label="Search products"/>
+                                <button class="btn btn-outline-secondary" t-on-click="clearSearch" aria-label="Clear search">
+                                    <i class="fa fa-times"/>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="ms-2">
+                            <select class="form-select" t-on-change="onFilterChange" aria-label="Filter products">
+                                <option value="all">All Products</option>
+                                <option value="positive">Available (&gt; 0)</option>
+                                <option value="negative">Negative Stock (&lt; 0)</option>
+                                <option value="zero">Zero Stock (= 0)</option>
+                                <option value="reserved">Has Reserved</option>
+                                <option value="replenishment">Has Incoming</option>
+                                <option value="outgoing">Has Outgoing</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" t-on-click="refreshData" aria-label="Refresh">
+                            <i class="fa fa-refresh me-1"/>Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <t t-if="state.loading">
+                    <div class="o_loading_screen">
+                        <div class="o_spinner_container">
+                            <i class="fa fa-spinner fa-spin fa-2x" role="img" aria-label="Loading"/>
+                            <div class="o_loading_text mt-2">Loading...</div>
+                        </div>
+                    </div>
+                </t>
+                <t t-elif="state.error">
+                    <div class="alert alert-danger" role="alert">
+                        <t t-esc="state.error"/>
+                    </div>
+                </t>
+                <t t-else="">
+                    <div class="o_product_attribute_matrix">
+                        <div class="o_matrix_container">
+                            <table class="table o_list_table o_matrix_table">
+                                <thead class="thead-light o_list_view_header">
+                                    <tr>
+                                        <th class="o_image_col" style="width: 120px;">Image</th>
+                                        <th class="o_name_col">Product</th>
+                                        <t t-if="state.attributes.length &gt; 0 &amp;&amp; state.attributes[0]">
+                                            <th class="o_primary_col">
+                                                <t t-esc="state.attributes[0].name"/>
+                                            </th>
+                                        </t>
+                                        <t t-else="">
+                                            <th class="o_primary_col">Primary Attribute</th>
+                                        </t>
+                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">
+                                            <th t-att-colspan="state.attributes[1].values.length" class="o_secondary_col text-center">
+                                                <t t-esc="state.attributes[1].name"/>
+                                            </th>
+                                        </t>
+                                        <t t-else="">
+                                            <th class="o_secondary_col">Secondary Attribute</th>
+                                        </t>
+                                    </tr>
+                                    <tr>
+                                        <th></th>
+                                        <th></th>
+                                        <th class="o_quantity_col text-center">
+                                            <t t-if="state.config &amp;&amp; state.config.use_forecast">
+                                                Forecasted Quantity
+                                            </t>
+                                            <t t-else="">
+                                                On Hand Quantity
+                                            </t>
+                                        </th>
+                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">
+                                            <t t-foreach="state.attributes[1].values" t-as="col" t-key="col.id">
+                                                <th class="text-center" t-esc="col.display_name || col.name"/>
+                                            </t>
+                                        </t>
+                                        <t t-else="">
+                                            <th>Value</th>
+                                        </t>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="getFilteredProducts()" t-as="product" t-key="product.id">
+                                        <t t-set="matrix" t-value="_createAttributeMatrix(product)"/>
+                                        <t t-if="matrix &amp;&amp; matrix.rows.length &gt; 0 &amp;&amp; state.attributes.length &gt;= 2">
+                                            <t t-foreach="matrix.rows" t-as="row" t-key="row.header">
+                                                <tr class="o_matrix_row">
+                                                    <t t-if="row_index === 0">
+                                                        <td class="o_image_cell" t-att-rowspan="matrix.rows.length">
+                                                            <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
+                                                        </td>
+                                                        <td class="o_name_cell" t-att-rowspan="matrix.rows.length">
+                                                            <div class="o_product_name">
+                                                                <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
+                                                            </div>
+                                                            <div t-if="product.variants.length > 0" class="text-muted small">
+                                                                <span>
+                                                                    <t t-esc="product.variants.length"/> variants
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    </t>
+                                                    <td class="o_primary_value_cell fw-medium">
+                                                        <span t-esc="row.header"/>
+                                                    </td>
+                                                    <t t-foreach="row.cells" t-as="cell" t-key="getCellKey(cell_index)">
+                                                        <td class="o_quantity_cell text-center" t-on-click="() => this.handleCellClick(cell, product.id)">
+                                                            <t t-if="cell">
+                                                                <span class="o_quantity" t-att-class="getVariantCellClass(cell)" t-esc="formatQty(cell.qty)"/>
+                                                            </t>
+                                                            <t t-else="">
+                                                                <span class="o_quantity o_no_quantity">-</span>
+                                                            </t>
+                                                        </td>
+                                                    </t>
+                                                </tr>
+                                            </t>
+                                        </t>
+                                        <t t-elif="product.variants.length &gt; 0">
+                                            <!-- Simple list when no matrix is available -->
+                                            <tr class="o_product_row">
+                                                <td class="o_image_cell" t-att-rowspan="product.variants.length">
+                                                    <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
+                                                </td>
+                                                <td class="o_name_cell" t-att-rowspan="product.variants.length">
+                                                    <div class="o_product_name">
+                                                        <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
+                                                    </div>
+                                                    <div t-if="product.variants.length > 0" class="text-muted small">
+                                                        <span>
+                                                            <t t-esc="product.variants.length"/> variants
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td class="o_attribute_cell" t-att-colspan="state.attributes.length &gt;= 2 ? state.attributes[1].values.length + 1 : 2">
+                                                    <table class="table table-sm o_inner_table mb-0">
+                                                        <thead class="o_inner_header">
+                                                            <tr>
+                                                                <th>Variant</th>
+                                                                <th class="text-center">Quantity</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <t t-foreach="product.variants" t-as="variant" t-key="variant.id">
+                                                                <tr>
+                                                                    <td class="o_variant_name">
+                                                                        <t t-if="variant.default_code">
+                                                                            <span class="text-muted me-2">[<t t-esc="variant.default_code"/>]</span>
+                                                                        </t>
+                                                                        <t t-foreach="Object.entries(variant.attributes || {})" t-as="attr" t-key="attr[0]">
+                                                                            <span class="badge rounded-pill bg-light text-dark me-1">
+                                                                                <t t-esc="getAttributeDisplayValue(attr[0], attr[1])"/>
+                                                                            </span>
+                                                                        </t>
+                                                                    </td>
+                                                                    <td class="o_quantity_cell text-center" t-on-click="() => this.handleVariantClick(variant, product.id)">
+                                                                        <span t-att-class="getQuantityClass(variant.qty_available)" class="o_quantity">
+                                                                            <t t-esc="formatQty(variant.qty_available)"/>
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            </t>
+                                                        </tbody>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                        <t t-else="">
+                                            <tr class="o_product_row">
+                                                <td class="o_image_cell">
+                                                    <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
+                                                </td>
+                                                <td class="o_name_cell">
+                                                    <div class="o_product_name">
+                                                        <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
+                                                    </div>
+                                                </td>
+                                                <td class="text-center text-muted" t-att-colspan="state.attributes.length &gt;= 2 ? state.attributes[1].values.length + 1 : 2">
+                                                    No variants available for this product.
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </t>
+
+                                    <t t-if="getFilteredProducts().length === 0">
+                                        <tr>
+                                            <td colspan="100%" class="text-center p-5">
+                                                <div class="alert alert-info d-inline-block">
+                                                    <i class="fa fa-info-circle me-2" role="img" aria-label="Information"/>
+                                                    No products found matching your criteria.
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="o_pagination d-flex justify-content-between align-items-center mt-2">
+                            <div class="o_pagination_info">
+                                Showing Page: <t t-esc="state.currentPage"/> of <t t-esc="state.totalPages"/>
+                            </div>
+                            <div class="o_pagination_controls">
+                                <ul class="pagination mb-0">
+                                    <li class="page-item" t-att-class="state.currentPage == 1 ? 'disabled' : ''">
+                                        <a class="page-link" href="#" t-on-click.prevent="prevPage">&#171;</a>
+                                    </li>
+                                    <li class="page-item active">
+                                        <span class="page-link">
+                                            <t t-esc="state.currentPage"/>
+                                        </span>
+                                    </li>
+                                    <li class="page-item" t-att-class="state.currentPage == state.totalPages ? 'disabled' : ''">
+                                        <a class="page-link" href="#" t-on-click.prevent="nextPage">&#187;</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- Variant Details Modal -->
+                <div t-if="state.showVariantModal" class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">
+                                    <t t-if="state.selectedVariant">
+                                        <t t-esc="state.selectedVariant.name"/>
+                                    </t>
+                                </h5>
+                                <button type="button" class="btn-close" aria-label="Close" t-on-click="closeVariantModal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <t t-if="state.selectedVariant">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <img t-att-src="state.selectedVariant.image" class="img-fluid rounded mb-3"/>
+                                        </div>
+                                        <div class="col-md-8">
+                                            <h6 class="mb-3">Stock Information</h6>
+                                            <table class="table table-bordered">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Stock Type</th>
+                                                        <th class="text-center">Quantity</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr>
+                                                        <td>On Hand</td>
+                                                        <td class="text-center">
+                                                            <td t-esc="formatQty(state.selectedVariant.qty)"></td>
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>Reserved</td>
+                                                        <td t-esc="formatQty(state.selectedVariant.qty_reserved)"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>Incoming</td>
+                                                        <td t-esc="formatQty(state.selectedVariant.qty_incoming)"></td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td>Outgoing</td>
+                                                        <td t-esc="formatQty(state.selectedVariant.qty_outgoing)"></td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary me-2" t-on-click="closeVariantModal">Close</button>
+                                <t t-if="state.selectedVariant &amp;&amp; state.selectedVariant.product_url">
+                                    <a t-att-href="state.selectedVariant.product_url" target="_blank" class="btn btn-primary">View Product</a>
+                                </t>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal backdrop -->
+                <div t-if="state.showVariantModal" class="modal-backdrop fade show"></div>
+            </div>
+        </Layout>
+    </t>
+</templates>
