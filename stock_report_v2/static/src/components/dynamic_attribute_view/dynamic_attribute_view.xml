@@ -16,6 +16,25 @@
                         </small>
                     </div>
                     <div class="d-flex align-items-center gap-2">
+                        <div class="form-check ms-3 show_img">
+                            <input type="checkbox" class="form-check-input"
+                                id="showImageCheckbox"
+                                t-att-checked="state.config.show_images"
+                                t-on-change="onImageCheckboxChange"/>
+                            <label class="form-check-label" for="showImageCheckbox">
+                                Show Images
+                            </label>
+                        </div>
+                        <div class="form-check ms-3 show_forecasted_qty">
+                            <input type="checkbox" class="form-check-input"
+                                id="showForecastCheckbox"
+                                t-att-checked="state.config.use_forecast"
+                                t-on-change="onForecastCheckboxChange"/>
+                            <label class="form-check-label" for="showForecastCheckbox">
+                                Show Forecasted Qty
+                            </label>
+                        </div>
+
                         <div class="o_search_container">
                             <div class="o_search_panel input-group">
                                 <input type="text" class="form-control" t-att-value="state.searchInput" t-on-input="onSearchInput" placeholder="Search products..." aria-label="Search products"/>
@@ -60,7 +79,7 @@
                             <table class="table o_list_table o_matrix_table">
                                 <thead class="thead-light o_list_view_header">
                                     <tr>
-                                        <th class="o_image_col" style="width: 120px;">Image</th>
+                                        <th t-if="state.config &amp;&amp; state.config.show_images" class="o_image_col" style="width: 120px;">Image</th>
                                         <th class="o_name_col">Product</th>
                                         <t t-if="state.attributes.length &gt; 0 &amp;&amp; state.attributes[0]">
                                             <th class="o_primary_col">
@@ -70,17 +89,17 @@
                                         <t t-else="">
                                             <th class="o_primary_col">Primary Attribute</th>
                                         </t>
-                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">
+                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">                            
                                             <th t-att-colspan="state.attributes[1].values.length" class="o_secondary_col text-center">
                                                 <t t-esc="state.attributes[1].name"/>
                                             </th>
-                                        </t>
+                                        </t> 
                                         <t t-else="">
                                             <th class="o_secondary_col">Secondary Attribute</th>
                                         </t>
                                     </tr>
                                     <tr>
-                                        <th></th>
+                                        <th t-if="state.config &amp;&amp; state.config.show_images"></th>
                                         <th></th>
                                         <th class="o_quantity_col text-center">
                                             <t t-if="state.config &amp;&amp; state.config.use_forecast">
@@ -92,7 +111,7 @@
                                         </th>
                                         <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">
                                             <t t-foreach="state.attributes[1].values" t-as="col" t-key="col.id">
-                                                <th class="text-center" t-esc="col.display_name || col.name"/>
+                                                <th class="text-center" t-esc="col.name || col.name"/>
                                             </t>
                                         </t>
                                         <t t-else="">
@@ -107,7 +126,7 @@
                                             <t t-foreach="matrix.rows" t-as="row" t-key="row.header">
                                                 <tr class="o_matrix_row">
                                                     <t t-if="row_index === 0">
-                                                        <td class="o_image_cell" t-att-rowspan="matrix.rows.length">
+                                                        <td t-if="state.config &amp;&amp; state.config.show_images" class="o_image_cell"  t-att-rowspan="matrix.rows.length">
                                                             <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
                                                         </td>
                                                         <td class="o_name_cell" t-att-rowspan="matrix.rows.length">

@@ -6,7 +6,7 @@
         Advanced Stock Reports.
     """,
     'category': 'Inventory',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.1.0',
     'depends': ['base', 'stock', 'product', 'web'],
     'data': [
         'security/ir.model.access.csv',

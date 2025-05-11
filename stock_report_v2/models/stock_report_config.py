@@ -14,6 +14,7 @@ class StockReportConfig(models.Model):
                                     default=lambda self: self.env.ref('stock.menu_stock_root', raise_if_not_found=False))
     active = fields.Boolean(default=True)
     sequence = fields.Integer(default=10)
+    show_images = fields.Boolean(string="Show Images", default=True)
     use_forecast = fields.Boolean(string="Use Forecasted Quantities", default=False)
     filter_zero = fields.Boolean(string="Hide Zero Quantities", default=True)
     include_negative = fields.Boolean(string="Include Negative Quantities", default=True)

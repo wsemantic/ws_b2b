@@ -11,6 +11,7 @@
                 <field name="primary_attribute_id"/>
                 <field name="secondary_attribute_id"/>
                 <field name="parent_menu_id"/>
+                <field name="show_images"/>
                 <field name="use_forecast"/>
                 <field name="active" widget="boolean_toggle"/>
             </tree>
@@ -37,6 +38,7 @@
                             <field name="parent_menu_id"/>
                         </group>
                         <group>
+                            <field name="show_images"/>
                             <field name="use_forecast"/>
                             <field name="filter_zero"/>
                             <field name="include_negative"/>

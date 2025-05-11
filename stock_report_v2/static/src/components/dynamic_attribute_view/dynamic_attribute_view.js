@@ -50,13 +50,15 @@ export class DynamicAttributeView extends Component {
                     const configs = await this.orm.call(
                         "stock.report.config",
                         "read",
-                        [this.configId, ["name", "primary_attribute_id", "secondary_attribute_id", "use_forecast", "filter_zero", "include_negative"]]
+                        [this.configId, ["name", "primary_attribute_id", "secondary_attribute_id", "use_forecast", "show_images", "filter_zero", "include_negative"]]
                     );
                     this.state.config = configs[0] || null;
                     
                     if (this.state.config) {
                         this.state.useForecast = this.state.config.use_forecast;
+                        this.state.show_images = this.state.config.show_images;
                     }
+
                     
                     await this.fetchData();
                 } catch (error) {
@@ -84,7 +86,8 @@ export class DynamicAttributeView extends Component {
                     page: this.state.currentPage,
                     page_size: this.state.pageSize,
                     search_term: this.state.searchInput || '',
-                    use_forecast: this.state.config.use_forecast
+                    use_forecast: this.state.config.use_forecast,
+                    show_images: this.state.config.show_images
                 }
             };
             
@@ -459,5 +462,25 @@ export class DynamicAttributeView extends Component {
     
     getCellKey(index) {
         return index || 0;
+    }
+    
+    async onForecastCheckboxChange(ev) {
+        const newVal = ev.target.checked;
+        this.state.config.use_forecast = newVal;
+
+        await this.orm.write('stock.report.config', [this.configId], {
+            use_forecast: newVal,
+        });
+        await this.fetchData();
+    }
+
+    async onImageCheckboxChange(ev) {
+        const newVal = ev.target.checked;
+        this.state.config.show_images = newVal;
+
+        await this.orm.write('stock.report.config', [this.configId], {
+            show_images: newVal,
+        });
+
     }
 } 
