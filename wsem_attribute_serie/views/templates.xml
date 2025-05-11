@@ -1,0 +1,38 @@
+<odoo>
+    <data>
+<!-- views/variant_grid_template.xml -
+
+		<template id="variant_grid_template" t-name="wsem_attribute_serie.variant_grid_template">
+			<div class="o_form_sheet">
+				<table class="table table-bordered">
+					<thead>
+						<tr>
+							<th>Color</th>
+							<th>Talla 1</th>
+							<th>Talla 2</th>
+							<th>Talla 3</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr t-foreach="line_ids" t-as="line">
+							<td>
+								<span t-field="line.color_id.name"/>
+							</td>
+							<td>
+								<input type="number" t-att-value="line.cantidad_talla_1" t-on-change="onchange_line(line, 1)"/>
+							</td>
+							<td>
+								<input type="number" t-att-value="line.cantidad_talla_2" t-on-change="onchange_line(line, 2)"/>
+							</td>
+							<td>
+								<input type="number" t-att-value="line.cantidad_talla_3" t-on-change="onchange_line(line, 3)"/>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</template>-->
+
+
+    </data>
+</odoo>

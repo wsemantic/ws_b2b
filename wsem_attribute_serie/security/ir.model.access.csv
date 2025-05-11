@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+wsem_attribute_serie.access_attribute_serie_user,Attribute Serie User,model_attribute_serie,base.group_user,1,1,1,1
+wsem_attribute_serie.access_attribute_serie_item_user,Attribute Serie Item User,model_attribute_serie_item,base.group_user,1,1,1,1

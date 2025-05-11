@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<odoo>
+    <data>
+        <!-- Menú principal -->
+        <menuitem id="menu_attribute_serie" name="Series Tallas" parent="sale.sale_menu_root" sequence="10"/>
+
+        <!-- Acción para abrir la vista de lista de series de atributos -->
+        <record id="action_attribute_serie" model="ir.actions.act_window">
+            <field name="name">Series Tallas</field>
+            <field name="res_model">attribute.serie</field>
+            <field name="view_mode">tree,form</field>
+        </record>
+
+        <!-- Menú para la acción de series de atributos -->
+        <menuitem id="menu_attribute_serie_list" name="Series Tallas" parent="menu_attribute_serie" action="action_attribute_serie" sequence="1"/>
+
+        <!-- Vista de lista para series de atributos -->
+        <record id="view_attribute_serie_tree" model="ir.ui.view">
+            <field name="name">attribute.serie.tree</field>
+            <field name="model">attribute.serie</field>
+            <field name="arch" type="xml">
+                <tree>
+                    <field name="name"/>
+                </tree>
+            </field>
+        </record>
+
+
+        <!-- Vista de formulario para series de atributos -->
+        <record id="view_attribute_serie_form" model="ir.ui.view">
+            <field name="name">attribute.serie.form</field>
+            <field name="model">attribute.serie</field>
+            <field name="arch" type="xml">
+                <form>
+                    <sheet>
+                        <group>
+                            <field name="name"/>
+                        </group>
+                        <notebook>
+                            <page string="Items">
+                                <field name="item_ids">
+                                    <tree editable="bottom">
+										<field name="sequence" widget="handle"/>
+                                        <field name="attribute_value_id"/>
+                                    </tree>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>		
+		
+		<record id="view_product_template_product_form_inherit" model="ir.ui.view">
+			<field name="name">product.template.product.form.inherit</field>
+			<field name="model">product.template</field>
+			<field name="inherit_id" ref="product.product_template_form_view"/>
+			
+			<field name="arch" type="xml">
+				<xpath expr="//field[@name='categ_id']" position="after">
+					<field name="attribute_serie_id"/>
+				</xpath>
+			</field>
+		</record>
+
+
+	</data>
+</odoo>
