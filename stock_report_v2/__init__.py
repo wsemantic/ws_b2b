@@ -3,7 +3,7 @@
 from . import models
 from odoo import api, SUPERUSER_ID
 
-def post_init_hook(cr, registry):
+def post_init_hook(cr):
     """Post-install script"""
     # Force recreation of the product_attribute_report view
     env = api.Environment(cr, SUPERUSER_ID, {})
