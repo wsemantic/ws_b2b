@@ -76,161 +76,98 @@
                 <t t-else="">
                     <div class="o_product_attribute_matrix">
                         <div class="o_matrix_container">
+                            <!-- Group products by series -->
+                            <t t-set="series_groups" t-value="groupProductsBySeries(state.filteredProducts)"/>
+                            
+                            <!-- Create a single table for all products -->
                             <table class="table o_list_table o_matrix_table">
                                 <thead class="thead-light o_list_view_header">
                                     <tr>
                                         <th t-if="state.config &amp;&amp; state.config.show_images" class="o_image_col" style="width: 120px;">Image</th>
                                         <th class="o_name_col">Product</th>
-                                        <t t-if="state.attributes.length &gt; 0 &amp;&amp; state.attributes[0]">
+                                        <t t-if="state.attributes.length > 0 &amp;&amp; state.attributes[0]">
                                             <th class="o_primary_col">
                                                 <t t-esc="state.attributes[0].name"/>
                                             </th>
                                         </t>
-                                        <t t-else="">
-                                            <th class="o_primary_col">Primary Attribute</th>
-                                        </t>
-                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">                            
-                                            <th t-att-colspan="state.attributes[1].values.length" class="o_secondary_col text-center">
-                                                <t t-esc="state.attributes[1].name"/>
-                                            </th>
-                                        </t> 
-                                        <t t-else="">
-                                            <th class="o_secondary_col">Secondary Attribute</th>
-                                        </t>
-                                    </tr>
-                                    <tr>
-                                        <th t-if="state.config &amp;&amp; state.config.show_images"></th>
-                                        <th></th>
-                                        <th class="o_quantity_col text-center">
-                                            <t t-if="state.config &amp;&amp; state.config.use_forecast">
-                                                Forecasted Quantity
-                                            </t>
-                                            <t t-else="">
-                                                On Hand Quantity
-                                            </t>
-                                        </th>
-                                        <t t-if="state.attributes.length &gt; 1 &amp;&amp; state.attributes[1]">
-                                            <t t-foreach="state.attributes[1].values" t-as="col" t-key="col.id">
-                                                <th class="text-center" t-esc="col.name || col.name"/>
-                                            </t>
-                                        </t>
-                                        <t t-else="">
-                                            <th>Value</th>
+                                        <th class="o_warehouse_col text-center">Warehouse</th>
+                                        <th class="o_location_col text-center">Location</th>
+                                        <!-- Get series groups and maximum number of size columns -->
+                                        <t t-set="series_groups" t-value="groupProductsBySeries(state.filteredProducts)"/>
+                                        <t t-set="max_serie_count" t-value="getMaxSerieValuesCount(series_groups)"/>
+                                        <t t-foreach="Array(max_serie_count).fill(0).map((_, i) => i)" t-as="index" t-key="index">
+                                            <th class="o_serie_value_col text-center">-</th>
                                         </t>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <t t-foreach="getFilteredProducts()" t-as="product" t-key="product.id">
-                                        <t t-set="matrix" t-value="_createAttributeMatrix(product)"/>
-                                        <t t-if="matrix &amp;&amp; matrix.rows.length &gt; 0 &amp;&amp; state.attributes.length &gt;= 2">
-                                            <t t-foreach="matrix.rows" t-as="row" t-key="row.header">
-                                                <tr class="o_matrix_row">
-                                                    <t t-if="row_index === 0">
-                                                        <td t-if="state.config &amp;&amp; state.config.show_images" class="o_image_cell"  t-att-rowspan="matrix.rows.length">
-                                                            <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
-                                                        </td>
-                                                        <td class="o_name_cell" t-att-rowspan="matrix.rows.length">
-                                                            <div class="o_product_name">
-                                                                <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
-                                                            </div>
-                                                            <div t-if="product.variants.length > 0" class="text-muted small">
-                                                                <span>
-                                                                    <t t-esc="product.variants.length"/> variants
-                                                                </span>
-                                                            </div>
-                                                        </td>
+                                    <!-- Iterate through each product group -->
+                                    <t t-foreach="series_groups" t-as="serie" t-key="serie.serie_id">
+                                        <!-- Size header row for this group -->
+                                        <tr class="o_size_header">
+                                            <td t-if="state.config &amp;&amp; state.config.show_images" class="p-0"></td>
+                                            <td colspan="4" class="p-0"></td>
+                                            <!-- Show the actual size values for this group, with placeholders for extra columns -->
+                                            <t t-foreach="Array(max_serie_count).fill(0).map((_, i) => i)" t-as="index" t-key="index">
+                                                <td class="text-center fw-bold">
+                                                    <t t-if="index &lt; serie.serie_values.length">
+                                                        <t t-esc="serie.serie_values[index]"/>
                                                     </t>
-                                                    <td class="o_primary_value_cell fw-medium">
-                                                        <span t-esc="row.header"/>
-                                                    </td>
-                                                    <t t-foreach="row.cells" t-as="cell" t-key="getCellKey(cell_index)">
-                                                        <td class="o_quantity_cell text-center" t-on-click="() => this.handleCellClick(cell, product.id)">
-                                                            <t t-if="cell">
-                                                                <span class="o_quantity" t-att-class="getVariantCellClass(cell)" t-esc="formatQty(cell.qty)"/>
-                                                            </t>
-                                                            <t t-else="">
-                                                                <span class="o_quantity o_no_quantity">-</span>
-                                                            </t>
+                                                    <t t-else="">-</t>
+                                                </td>
+                                            </t>
+                                        </tr>
+                                        
+                                        <!-- Products in this group -->
+                                        <t t-foreach="serie.products" t-as="product" t-key="product.id">
+                                            <t t-set="matrix" t-value="_createAttributeMatrix(product)"/>
+                                            <t t-if="matrix &amp;&amp; matrix.rows.length > 0">
+                                                <t t-foreach="matrix.rows" t-as="row" t-key="row.header">
+                                                    <tr class="o_matrix_row">
+                                                        <t t-if="row_index == 0">
+                                                            <td t-if="state.config &amp;&amp; state.config.show_images" class="o_image_cell" t-att-rowspan="matrix.rows.length">
+                                                                <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 120px; height: 120px; object-fit: contain;"/>
+                                                            </td>
+                                                        </t>
+                                                        <td class="o_name_cell">
+                                                            <a t-att-href="product.product_url" target="_blank" class="fw-medium" t-esc="product.name"/>
                                                         </td>
-                                                    </t>
-                                                </tr>
+                                                        <td class="o_primary_value_cell fw-medium">
+                                                            <span t-esc="row.header"/>
+                                                        </td>
+                                                        <td class="o_warehouse_cell text-center">
+                                                            <t t-set="variantWithLocation" t-value="row.cells.find(c => c &amp;&amp; c.variant &amp;&amp; (c.variant.warehouse_name || c.variant.location_name))"/>
+                                                            <span t-esc="variantWithLocation ? variantWithLocation.variant.warehouse_name : '-'"/>
+                                                        </td>
+                                                        <td class="o_location_cell text-center">
+                                                            <t t-set="variantWithLocation" t-value="row.cells.find(c => c &amp;&amp; c.variant &amp;&amp; (c.variant.warehouse_name || c.variant.location_name))"/>
+                                                            <span t-esc="variantWithLocation ? variantWithLocation.variant.location_name : '-'"/>
+                                                        </td>
+                                        
+                                                        <!-- Display cells for each size column -->
+                                                        <t t-foreach="Array(max_serie_count).fill(0).map((_, i) => i)" t-as="index" t-key="index">
+                                                            <td class="o_quantity_cell text-center">
+                                                                <t t-if="index &lt; serie.serie_values.length">
+                                                                    <t t-set="value" t-value="serie.serie_values[index]"/>
+                                                                    <t t-set="cell" t-value="getCellForSerieValue(row, value)"/>
+                                                                    <t t-if="cell">
+                                                                        <span class="o_quantity" t-att-class="getVariantCellClass(cell)" 
+                                                                              t-on-click="() => this.handleCellClick(cell, product.id)" 
+                                                                              t-esc="formatQty(cell.qty)"/>
+                                                                    </t>
+                                                                    <t t-else="">
+                                                                        <span class="o_quantity o_no_quantity">-</span>
+                                                                    </t>
+                                                                </t>
+                                                                <t t-else="">
+                                                                    <span class="o_quantity o_no_quantity">-</span>
+                                                                </t>
+                                                            </td>
+                                                        </t>
+                                                    </tr>
+                                                </t>
                                             </t>
                                         </t>
-                                        <t t-elif="product.variants.length &gt; 0">
-                                            <!-- Simple list when no matrix is available -->
-                                            <tr class="o_product_row">
-                                                <td class="o_image_cell" t-att-rowspan="product.variants.length">
-                                                    <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
-                                                </td>
-                                                <td class="o_name_cell" t-att-rowspan="product.variants.length">
-                                                    <div class="o_product_name">
-                                                        <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
-                                                    </div>
-                                                    <div t-if="product.variants.length > 0" class="text-muted small">
-                                                        <span>
-                                                            <t t-esc="product.variants.length"/> variants
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td class="o_attribute_cell" t-att-colspan="state.attributes.length &gt;= 2 ? state.attributes[1].values.length + 1 : 2">
-                                                    <table class="table table-sm o_inner_table mb-0">
-                                                        <thead class="o_inner_header">
-                                                            <tr>
-                                                                <th>Variant</th>
-                                                                <th class="text-center">Quantity</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            <t t-foreach="product.variants" t-as="variant" t-key="variant.id">
-                                                                <tr>
-                                                                    <td class="o_variant_name">
-                                                                        <t t-if="variant.default_code">
-                                                                            <span class="text-muted me-2">[<t t-esc="variant.default_code"/>]</span>
-                                                                        </t>
-                                                                        <t t-foreach="Object.entries(variant.attributes || {})" t-as="attr" t-key="attr[0]">
-                                                                            <span class="badge rounded-pill bg-light text-dark me-1">
-                                                                                <t t-esc="getAttributeDisplayValue(attr[0], attr[1])"/>
-                                                                            </span>
-                                                                        </t>
-                                                                    </td>
-                                                                    <td class="o_quantity_cell text-center" t-on-click="() => this.handleVariantClick(variant, product.id)">
-                                                                        <span t-att-class="getQuantityClass(variant.qty_available)" class="o_quantity">
-                                                                            <t t-esc="formatQty(variant.qty_available)"/>
-                                                                        </span>
-                                                                    </td>
-                                                                </tr>
-                                                            </t>
-                                                        </tbody>
-                                                    </table>
-                                                </td>
-                                            </tr>
-                                        </t>
-                                        <t t-else="">
-                                            <tr class="o_product_row">
-                                                <td class="o_image_cell">
-                                                    <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 200px; height: 200px; object-fit: contain;"/>
-                                                </td>
-                                                <td class="o_name_cell">
-                                                    <div class="o_product_name">
-                                                        <a t-att-href="product.product_url" target="_blank" class="text-danger fw-bold" t-esc="product.name"/>
-                                                    </div>
-                                                </td>
-                                                <td class="text-center text-muted" t-att-colspan="state.attributes.length &gt;= 2 ? state.attributes[1].values.length + 1 : 2">
-                                                    No variants available for this product.
-                                                </td>
-                                            </tr>
-                                        </t>
-                                    </t>
-
-                                    <t t-if="getFilteredProducts().length === 0">
-                                        <tr>
-                                            <td colspan="100%" class="text-center p-5">
-                                                <div class="alert alert-info d-inline-block">
-                                                    <i class="fa fa-info-circle me-2" role="img" aria-label="Information"/>
-                                                    No products found matching your criteria.
-                                                </div>
-                                            </td>
-                                        </tr>
                                     </t>
                                 </tbody>
                             </table>

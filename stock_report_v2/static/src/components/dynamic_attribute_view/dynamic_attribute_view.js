@@ -24,8 +24,16 @@ export class DynamicAttributeView extends Component {
             className: "o_stock_report_layout",
         };
         
+        // Add CSS styles for the table
+        this._addTableStyles();
+        
         const context = this.props.action.context || {};
         this.configId = context.config_id || false;
+        
+        // Bind methods to ensure 'this' is always available
+        this.handleCellClick = this.handleCellClick.bind(this);
+        this.getVariantCellClass = this.getVariantCellClass.bind(this);
+        this.getCellForSerieValue = this.getCellForSerieValue.bind(this);
         
         this.state = useState({
             products: [],
@@ -72,6 +80,98 @@ export class DynamicAttributeView extends Component {
                 this.state.loading = false;
             }
         });
+    }
+
+    _addTableStyles() {
+        // Add CSS styles for the table layout
+        const styleEl = document.createElement('style');
+        styleEl.textContent = `
+            .o_matrix_table {
+                border-collapse: collapse;
+                width: 100%;
+                margin-bottom: 1rem;
+                box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+            }
+            
+            .o_matrix_table th {
+                background-color: #f8f9fa;
+                border-bottom: 2px solid #dee2e6;
+                padding: 8px 12px;
+                text-align: center;
+                font-weight: bold;
+            }
+            
+            .o_matrix_table td {
+                padding: 8px 12px;
+                border: 1px solid #dee2e6;
+            }
+            
+            .o_size_header td:nth-child(n+3){
+                background-color:rgb(116, 120, 106);
+                border-top: 2px solidrgb(54, 116, 177);
+                pointer-events: none;
+            }
+            
+            .o_size_header td {
+                border-bottom: 1px solid #adb5bd;
+                user-select: none;
+            }
+            
+            .o_size_header td:hover {
+                background-color:rgb(116, 120, 106);
+            }
+            
+            .o_size_header td:nth-child(n+3) {
+                font-weight: bold;
+                font-size: 1.1em;
+                color: #212529;
+                background-color:rgba(0,0,0,.075);
+                border-left: 1px solid #adb5bd;
+                border-right: 1px solidrgba(87, 154, 221, 0.38);
+            }
+            
+            .o_size_header td:nth-child(n+3):hover {
+                background-color:rgba(0,0,0,.075);
+            }
+            
+            .o_image_cell {
+                text-align: center;
+                vertical-align: middle;
+                width: 120px;
+            }
+            
+            .o_quantity_cell {
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            
+            .o_quantity_cell:hover {
+                background-color: rgba(0,123,255,0.1);
+            }
+            
+            .o_quantity.o_positive_qty_cell {
+                color: #28a745;
+                font-weight: bold;
+            }
+            
+            .o_quantity.o_negative_qty_cell {
+                color: #dc3545;
+                font-weight: bold;
+            }
+            
+            .o_quantity.o_zero_qty_cell {
+                color: #6c757d;
+            }
+            
+            .o_no_quantity {
+                color: #adb5bd;
+            }
+            
+            .o_serie_value_col {
+                min-width: 80px;
+            }
+        `;
+        document.head.appendChild(styleEl);
     }
 
     async fetchData() {
@@ -138,19 +238,41 @@ export class DynamicAttributeView extends Component {
     
 
     _transformProducts(products) {
-        return products.map(product => ({
-            ...product,
-            name: this._getFormattedName(product.name),
-            image_url: product.image_url || this.getRandomProductImage(),
-            product_url: product.product_url || `/web#id=${product.id}&model=product.template&view_type=form`,
-            variants: (product.variants || []).map(variant => ({
-                ...variant,
-                name: this._getFormattedName(variant.name),
-                image_url: variant.image_url || product.image_url || this.getRandomProductImage(),
-                product_url: variant.product_url || `/web#id=${variant.id}&model=product.product&view_type=form`,
-                attributes: variant.attributes || {}
-            }))
-        }));
+        console.log('Transforming products:', products);
+        
+        return products.map(product => {
+            // Extract all unique serie values from the product
+            const serieValues = product.serie_values || [];
+            console.log('Product serie_values:', product.id, serieValues);
+            
+            return {
+                ...product,
+                name: this._getFormattedName(product.name),
+                image_url: product.image_url || this.getRandomProductImage(),
+                product_url: product.product_url || `/web#id=${product.id}&model=product.template&view_type=form`,
+                serie_values: serieValues,
+                variants: (product.variants || []).map(variant => {
+                    // Make sure every variant has a serie_value if possible
+                    if (!variant.serie_value && serieValues.length > 0) {
+                        // If there's no serie_value, use attribute_value if available
+                        variant.serie_value = variant.attribute_value || serieValues[0];
+                    }
+                    
+                    console.log('Variant:', variant.id, 'serie_value:', variant.serie_value);
+                    
+                    return {
+                        ...variant,
+                        name: this._getFormattedName(variant.name),
+                        image_url: variant.image_url || product.image_url || this.getRandomProductImage(),
+                        product_url: variant.product_url || `/web#id=${variant.id}&model=product.product&view_type=form`,
+                        attributes: variant.attributes || {},
+                        warehouse_name: variant.warehouse_name || '',
+                        location_name: variant.location_name || '',
+                        serie_value: variant.serie_value
+                    };
+                })
+            };
+        });
     }
 
     _getFormattedName(nameField) {
@@ -298,22 +420,37 @@ export class DynamicAttributeView extends Component {
     }
     
     showVariantDetails(variant) {
-        if (!variant) return;
+        console.log('showVariantDetails - variant:', variant);
+        if (!variant) {
+            console.log('showVariantDetails - variant is null/undefined');
+            return;
+        }
         
-        const product = this.state.products.find(p => p.id === variant.product_tmpl_id);
-        const productName = product ? this._getFormattedName(product.name) : this._getFormattedName(variant.name);
+        // Find product from the current filtered products
+        const product = this.state.filteredProducts.length > 0 ? 
+            this.state.filteredProducts.find(p => p.variants.some(v => v.id === variant.id)) :
+            this.state.products.find(p => p.variants.some(v => v.id === variant.id));
+            
+        console.log('showVariantDetails - found product:', product);
         
+        if (!product) {
+            console.log('showVariantDetails - product not found');
+            return;
+        }
+
         const attributes = this.formatAttributesForDisplay(variant.attributes);
+        console.log('showVariantDetails - attributes:', attributes);
         const attributesList = attributes.map(attr => attr.value).join(', ');
         
         const qtyField = this.state.config && this.state.config.use_forecast ? 'virtual_available' : 'qty_available';
+        console.log('showVariantDetails - qtyField:', qtyField);
         
         this.state.selectedVariant = {
-            product: { name: productName },
+            product: { name: product.name },
             id: variant.id,
-            name: `${productName} - ${attributesList || variant.default_code || _t('Default')}`,
+            name: `${product.name} - ${attributesList || variant.default_code || _t('Default')}`,
             default_code: variant.default_code,
-            image: variant.image_url || this.getRandomProductImage(),
+            image: variant.image_url || product.image_url || this.getRandomProductImage(),
             qty: variant[qtyField] || 0,
             qty_on_hand: variant.qty_available || 0,
             qty_reserved: variant.qty_reserved || 0,
@@ -322,11 +459,15 @@ export class DynamicAttributeView extends Component {
             virtual_available: variant.virtual_available || 0,
             attributes: attributes,
             attributesList: attributesList || variant.default_code || _t('Default'),
-            quantityClass: this.getQuantityClass(variant[qtyField]),
-            product_url: variant.product_url || (product ? product.product_url : '#')
+            quantityClass: this.getVariantCellClass({qty: variant[qtyField]}),
+            product_url: variant.product_url || (product ? product.product_url : '#'),
+            warehouse_name: variant.warehouse_name || '',
+            location_name: variant.location_name || ''
         };
+        console.log('showVariantDetails - selectedVariant:', this.state.selectedVariant);
 
         this.state.showVariantModal = true;
+        console.log('showVariantDetails - modal shown');
     }
     
     formatAttributesForDisplay(attributes) {
@@ -352,57 +493,248 @@ export class DynamicAttributeView extends Component {
     }
     
     getFilteredProducts() {
-        return this.state.filteredProducts.length > 0 ? this.state.filteredProducts : this.state.products;
+        const products = this.state.filteredProducts.length > 0 ? this.state.filteredProducts : this.state.products;
+        
+        // Group products by their size attributes
+        const groupedProducts = {};
+        
+        products.forEach(product => {
+            const sizeAttr = this.state.attributes[1]; // Second attribute is size
+            if (!sizeAttr || !product.variants) return;
+            
+            // Get unique size values for this product
+            const productSizes = new Set();
+            product.variants.forEach(variant => {
+                if (variant.attributes && variant.attributes[sizeAttr.id]) {
+                    const sizeValue = sizeAttr.values.find(v => v.id === variant.attributes[sizeAttr.id]);
+                    if (sizeValue) {
+                        productSizes.add(sizeValue.name);
+                    }
+                }
+            });
+            
+            // Create a key for grouping
+            const sizeKey = Array.from(productSizes).sort().join(',');
+            if (!groupedProducts[sizeKey]) {
+                groupedProducts[sizeKey] = {
+                    sizes: Array.from(productSizes),
+                    products: []
+                };
+            }
+            groupedProducts[sizeKey].products.push(product);
+        });
+        
+        // Convert grouped products to array format
+        return Object.values(groupedProducts);
     }
     
+    groupProductsBySeries(products) {
+        const seriesGroups = {};
+        console.log(products, 'product')
+        products.forEach(product => {
+            const serieId = product.serie_id || 0;
+            console.log(serieId, 'serieId')
+            if (!seriesGroups[serieId]) {
+                console.log(product.serie_values, 'product.serie_values but i think hare sere vale avaliabe so we can diract add after ser name')
+
+                seriesGroups[serieId] = {
+
+                    serie_id: serieId,
+                    serie_name: product.serie_name || _t('No Series'),
+                    serie_values: product.serie_values ? [...new Set(product.serie_values)].sort() : [],
+                    products: []
+                };
+                console.log(seriesGroups[serieId], 'seriesGroups[serieId]')
+            }
+            
+            // Add product to the series group
+            seriesGroups[serieId].products.push(product);
+            
+            // Collect unique serie values from variants
+            product.variants.forEach(variant => {
+                if (variant.serie_value && !seriesGroups[serieId].serie_values.includes(variant.serie_value)) {
+                    seriesGroups[serieId].serie_values.push(variant.serie_value);
+                }
+            });
+            
+            // Sort serie values
+            seriesGroups[serieId].serie_values.sort();
+        });
+        console.log(seriesGroups, 'seriesGroups')
+        return Object.values(seriesGroups);
+    }
+    
+    // Get the maximum number of series values across all series groups
+    getMaxSerieValuesCount(series_groups) {
+        if (!series_groups || !Array.isArray(series_groups) || series_groups.length === 0) {
+            return 5; // Default to 5 if no series groups
+        }
+        
+        // Find the maximum number of serie_values across all series groups
+        const maxCount = Math.max(...series_groups.map(group => 
+            group.serie_values && Array.isArray(group.serie_values) ? group.serie_values.length : 0
+        ));
+        
+        // Return at least 5, or the actual maximum if greater
+        return Math.max(5, maxCount);
+    }
+    
+    getCellForSerieValue(row, serieValue) {
+        if (!row || !row.cells) return null;
+        
+        // Find a cell where the variant has a matching serie_value (size)
+        const cell = row.cells.find(c => 
+            c && c.variant && c.variant.serie_value === serieValue
+        );
+        
+        if (!cell) return null;
+        
+        const qtyField = this.state.config && this.state.config.use_forecast ? 
+            'virtual_available' : 'qty_available';
+            
+        return {
+            qty: cell.variant[qtyField] || 0,
+            variant: cell.variant
+        };
+    }
+
     _createAttributeMatrix(product) {
         if (!this.state.attributes.length || !product.variants?.length) return null;
         
         const [primaryAttr, secondaryAttr] = this.state.attributes;
-        if (!primaryAttr || !secondaryAttr) return null;
+        if (!primaryAttr) return null;
 
+        // Get all primary attribute values
         const primaryValues = primaryAttr.values.map(v => ({
             id: v.id,
-            name: v.display_name || v.name
+            name: v.name || v.display_name
         }));
+
+        // Get all unique serie values for this product (these are likely sizes: S, M, L, XL)
+        const serieValues = product.serie_values || [];
         
-        const secondaryValues = secondaryAttr.values.map(v => ({
-            id: v.id,
-            name: v.display_name || v.name
-        }));
+        // Map to store size/attribute mapping for each variant
+        const variantSizeMap = new Map();
+        
+        // First, identify which attribute is the size attribute (likely the secondary attribute)
+        const sizeAttribute = secondaryAttr || 
+            this.state.attributes.find(attr => 
+                attr.name.toLowerCase().includes('size') || 
+                attr.name.toLowerCase().includes('talla') ||
+                attr.name.toLowerCase().includes('tamaño')
+            );
+        
+        // Assign the correct size value to each variant
+        product.variants.forEach(variant => {
+            // If there's a secundary attribute (size), use that to set the serie_value
+            if (sizeAttribute && variant.attributes) {
+                const sizeAttrId = String(sizeAttribute.id);
+                const sizeValueId = variant.attributes[sizeAttrId];
+                
+                if (sizeValueId) {
+                    const sizeValue = sizeAttribute.values.find(v => v.id === sizeValueId);
+                    if (sizeValue) {
+                        // Use the size attribute value as the serie_value
+                        variant.serie_value = sizeValue.name;
+                        
+                        // Store in the map for easy lookup
+                        variantSizeMap.set(variant.id, sizeValue.name);
+                    }
+                }
+            }
+            
+            // If still no serie_value, use attribute_value as fallback
+            if (!variant.serie_value && variant.attribute_value) {
+                variant.serie_value = variant.attribute_value;
+                variantSizeMap.set(variant.id, variant.attribute_value);
+            }
+        });
 
-        const column_headers = secondaryValues.map(v => v.name);
-
-        const qtyField = this.state.config && this.state.config.use_forecast ? 'virtual_available' : 'qty_available';
-
+        // Create rows based on primary attribute values (e.g., colors)
         const rows = primaryValues.map(primaryValue => {
+            // Find variants matching this primary attribute value (e.g., all "Red" variants)
+            const matchingVariants = product.variants.filter(v => 
+                v.attributes?.[String(primaryAttr.id)] === primaryValue.id
+            );
+
+            if (matchingVariants.length === 0) return null;
+
             return {
                 header: primaryValue.name,
-                cells: secondaryValues.map(secondaryValue => {
-                    const variant = product.variants.find(v => {
-                        return (
-                            v.attributes?.[String(primaryAttr.id)] === primaryValue.id &&
-                            v.attributes?.[String(secondaryAttr.id)] === secondaryValue.id
-                        );
-                    });
-                    return variant ? { 
-                        qty: variant[qtyField], 
-                        variant 
-                    } : null;
+                cells: matchingVariants.map(variant => {
+                    if (!variant) return null;
+                    
+                    // Get the size for this variant
+                    const variantSize = variantSizeMap.get(variant.id) || variant.serie_value;
+                    
+                    // Set quantity field based on config
+                    const qtyField = this.state.config && this.state.config.use_forecast ? 
+                        'virtual_available' : 'qty_available';
+                    
+                    // Make sure all stock quantities are values, not undefined
+                    const qty = variant[qtyField] || 0;
+                    
+                    // Return a complete cell with all data
+                    return {
+                        qty: qty,
+                        variant: {
+                            ...variant,
+                            serie_value: variantSize  // Ensure serie_value is set to the size
+                        }
+                    };
                 })
             };
-        });
+        }).filter(row => row !== null);
 
         return {
             rows,
-            column_headers
+            column_headers: serieValues
         };
     }
     
     handleCellClick(cell, productId) {
-        if (cell?.variant) {
-            this.showVariantDetails(cell.variant); 
-            this.updateProductImage(productId, cell.variant.id);
+        try {
+            if (!cell) return;
+            
+            const variant = cell.variant;
+            if (!variant) return;
+            
+            // Find the product from the current filtered products
+            const product = this.state.filteredProducts.length > 0 ? 
+                this.state.filteredProducts.find(p => p.id === productId) :
+                this.state.products.find(p => p.id === productId);
+                
+            if (!product) return;
+
+            const attributes = this.formatAttributesForDisplay(variant.attributes);
+            const attributesList = attributes.map(attr => attr.value).join(', ');
+            
+            const qtyField = this.state.config && this.state.config.use_forecast ? 'virtual_available' : 'qty_available';
+            
+            this.state.selectedVariant = {
+                product: { name: product.name },
+                id: variant.id,
+                name: `${product.name} - ${attributesList || variant.default_code || _t('Default')}`,
+                default_code: variant.default_code,
+                image: variant.image_url || product.image_url || this.getRandomProductImage(),
+                qty: variant[qtyField] || 0,
+                qty_on_hand: variant.qty_available || 0,
+                qty_reserved: variant.qty_reserved || 0,
+                qty_incoming: variant.qty_incoming || 0,
+                qty_outgoing: variant.qty_outgoing || 0,
+                virtual_available: variant.virtual_available || 0,
+                attributes: attributes,
+                attributesList: attributesList || variant.default_code || _t('Default'),
+                quantityClass: this.getVariantCellClass(cell),
+                product_url: variant.product_url || (product ? product.product_url : '#'),
+                warehouse_name: variant.warehouse_name || '',
+                location_name: variant.location_name || ''
+            };
+
+            this.state.showVariantModal = true;
+            this.updateProductImage(productId, variant.id);
+        } catch (error) {
+            console.error('Error in handleCellClick:', error);
         }
     }
     
@@ -482,5 +814,15 @@ export class DynamicAttributeView extends Component {
             show_images: newVal,
         });
 
+    }
+
+    getProductRowspan(product, matrix) {
+        // Calculate total rowspan for a product's image cell
+        // This considers all rows in all products in the same series
+        
+        // For the current product, get the number of rows
+        const currentProductRows = matrix.rows ? matrix.rows.length : 0;
+        
+        return currentProductRows;
     }
 } 

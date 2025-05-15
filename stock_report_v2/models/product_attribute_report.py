@@ -37,11 +37,14 @@ class ProductAttributeReport(models.Model):
                     SELECT 
                         sq.product_id,
                         SUM(sq.quantity) as qty_available,
-                        SUM(sq.reserved_quantity) as reserved_qty
+                        SUM(sq.reserved_quantity) as reserved_qty,
+                        sl.name as location_name,
+                        sw.name as warehouse_name
                     FROM stock_quant sq
                     JOIN stock_location sl ON sq.location_id = sl.id
+                    JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
                     WHERE sl.usage = 'internal'
-                    GROUP BY sq.product_id
+                    GROUP BY sq.product_id, sl.name, sw.name
                 ),
                 incoming_data AS (
                     SELECT
@@ -49,8 +52,8 @@ class ProductAttributeReport(models.Model):
                         SUM(product_qty) as incoming_qty
                     FROM stock_move
                     WHERE state IN ('assigned', 'confirmed', 'waiting')
-                      AND location_dest_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
-                      AND location_id NOT IN (SELECT id FROM stock_location WHERE usage = 'internal')
+                    AND location_dest_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
+                    AND location_id NOT IN (SELECT id FROM stock_location WHERE usage = 'internal')
                     GROUP BY product_id
                 ),
                 outgoing_data AS (
@@ -59,9 +62,20 @@ class ProductAttributeReport(models.Model):
                         SUM(product_qty) as outgoing_qty
                     FROM stock_move
                     WHERE state IN ('assigned', 'confirmed', 'waiting')
-                      AND location_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
-                      AND location_dest_id NOT IN (SELECT id FROM stock_location WHERE usage = 'internal')
+                    AND location_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
+                    AND location_dest_id NOT IN (SELECT id FROM stock_location WHERE usage != 'internal')
                     GROUP BY product_id
+                ),
+                serie_values AS (
+                    SELECT 
+                        pt.id as template_id,
+                        asi.attribute_value_id,
+                        pav.name as value_name,
+                        asi.sequence
+                    FROM product_template pt
+                    JOIN attribute_serie wsas ON pt.attribute_serie_id = wsas.id
+                    JOIN attribute_serie_item asi ON asi.attribute_serie_id = wsas.id
+                    JOIN product_attribute_value pav ON asi.attribute_value_id = pav.id
                 )
                 SELECT
                     ROW_NUMBER() OVER() AS id,
@@ -78,7 +92,13 @@ class ProductAttributeReport(models.Model):
                     COALESCE(id.incoming_qty, 0) AS incoming_qty, 
                     COALESCE(od.outgoing_qty, 0) AS outgoing_qty,
                     COALESCE(sd.reserved_qty, 0) AS reserved_qty,
-                    pt.uom_id AS uom_id
+                    pt.uom_id AS uom_id,
+                    sd.warehouse_name,
+                    sd.location_name,
+                    pt.attribute_serie_id,
+                    wsas.name as serie_name,
+                    sv.attribute_value_id as serie_value_id,
+                    sv.value_name as serie_value_name
                 FROM product_product pp
                 JOIN product_template pt ON pp.product_tmpl_id = pt.id
                 LEFT JOIN product_template_attribute_value ptav ON ptav.product_tmpl_id = pt.id AND ptav.product_attribute_value_id IS NOT NULL
@@ -87,10 +107,14 @@ class ProductAttributeReport(models.Model):
                 LEFT JOIN stock_data sd ON pp.id = sd.product_id
                 LEFT JOIN incoming_data id ON pp.id = id.product_id
                 LEFT JOIN outgoing_data od ON pp.id = od.product_id
+                LEFT JOIN attribute_serie wsas ON pt.attribute_serie_id = wsas.id
+                LEFT JOIN serie_values sv ON sv.template_id = pt.id
                 WHERE pt.active = true AND pt.type = 'product'
+                ORDER BY pt.id, sv.sequence
             )
         """ % self._table)
 
+# ... existing code ...
     @api.model
     def get_report_data_by_config(self, config_id):
         """Get report data based on configuration ID with pagination support using read_group"""
@@ -195,28 +219,58 @@ class ProductAttributeReport(models.Model):
                 'reserved_qty': 0.0,
                 'incoming_qty': 0.0,
                 'outgoing_qty': 0.0,
-                'virtual_available': 0.0
+                'virtual_available': 0.0,
+                'warehouse_name': '',
+                'location_name': ''
             }
 
-        # Get quants data (on-hand quantities)
-        quant_data = self.env['stock.quant'].read_group(
-            [
-                ('product_id', 'in', variant_ids),
-                ('location_id.usage', '=', 'internal')
-            ],
-            ['product_id', 'quantity:sum', 'reserved_quantity:sum'],
-            ['product_id']
-        )
+        # Get quants data with location information
+        self.env.cr.execute("""
+            WITH grouped_stock AS (
+                SELECT 
+                    sq.product_id,
+                    sl.name as location_name,
+                    sw.name as warehouse_name,
+                    SUM(sq.quantity) as total_quantity,
+                    SUM(sq.reserved_quantity) as total_reserved
+                FROM stock_quant sq
+                JOIN stock_location sl ON sq.location_id = sl.id
+                LEFT JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
+                WHERE sq.product_id IN %s
+                AND sl.usage = 'internal'
+                AND sq.quantity > 0
+                GROUP BY sq.product_id, sl.name, sw.name
+            ),
+            ranked_locations AS (
+                SELECT 
+                    product_id,
+                    location_name,
+                    warehouse_name,
+                    total_quantity,
+                    total_reserved,
+                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY total_quantity DESC) as rn
+                FROM grouped_stock
+            )
+            SELECT 
+                product_id,
+                SUM(total_quantity) OVER (PARTITION BY product_id) as total_quantity,
+                SUM(total_reserved) OVER (PARTITION BY product_id) as total_reserved,
+                location_name,
+                warehouse_name
+            FROM ranked_locations
+            WHERE rn = 1
+        """, (tuple(variant_ids),))
+        
+        quant_data = self.env.cr.dictfetchall()
 
         for item in quant_data:
-            product_id = item['product_id'][0]
-            qty_available = item['quantity'] or 0.0
-            reserved_qty = item['reserved_quantity'] or 0.0
-            
+            product_id = item['product_id']
             stock_data[product_id].update({
-                'qty_available': qty_available,
-                'reserved_qty': reserved_qty,
-                'virtual_available': qty_available  # Initialize with on-hand qty
+                'qty_available': item['total_quantity'] or 0.0,
+                'reserved_qty': item['total_reserved'] or 0.0,
+                'virtual_available': item['total_quantity'] or 0.0,
+                'warehouse_name': item['warehouse_name'] or '',
+                'location_name': item['location_name'] or ''
             })
 
         # Get incoming moves - all expected incoming stock
@@ -263,17 +317,6 @@ class ProductAttributeReport(models.Model):
             if use_forecast:
                 stock_data[product_id]['virtual_available'] -= outgoing_qty
 
-        # For products that don't have any inventory records, ensure we return the structure
-        for variant_id in variant_ids:
-            if variant_id not in stock_data:
-                stock_data[variant_id] = {
-                    'qty_available': 0.0,
-                    'reserved_qty': 0.0,
-                    'incoming_qty': 0.0,
-                    'outgoing_qty': 0.0,
-                    'virtual_available': 0.0
-                }
-
         return stock_data
 
     def _get_attribute_data(self, attributes):
@@ -295,62 +338,75 @@ class ProductAttributeReport(models.Model):
         products_data = []
         use_forecast = config.use_forecast
 
+        # Group templates by attribute series
+        series_groups = {}
         for template in product_templates:
-            template_variants = variants.filtered(lambda v: v.product_tmpl_id == template)
+            serie_id = template.attribute_serie_id.id if template.attribute_serie_id else 0
+            if serie_id not in series_groups:
+                series_groups[serie_id] = {
+                    'serie_id': serie_id,
+                    'serie_name': template.attribute_serie_id.name if template.attribute_serie_id else _('No Series'),
+                    'serie_values': template.attribute_serie_id.item_ids.mapped('attribute_value_id.name') if template.attribute_serie_id else [],
+                    'templates': []
+                }
+            series_groups[serie_id]['templates'].append(template)
+
+        # Process each series group
+        for serie_group in series_groups.values():
+            serie_products = []
             
-            # Skip processing if no variants were found
-            if not template_variants:
-                continue
+            for template in serie_group['templates']:
+                template_variants = variants.filtered(lambda v: v.product_tmpl_id == template)
                 
-            # Apply filters based on configuration
-            if config.filter_zero:
-                # Check if all variants have zero quantity (based on display mode)
-                qty_field = 'virtual_available' if use_forecast else 'qty_available'
-                if all(
-                    stock_data.get(v.id, {}).get(qty_field, 0) == 0 
-                    for v in template_variants
-                ):
+                if not template_variants:
                     continue
+                    
+                if config.filter_zero:
+                    qty_field = 'virtual_available' if use_forecast else 'qty_available'
+                    if all(stock_data.get(v.id, {}).get(qty_field, 0) == 0 for v in template_variants):
+                        continue
 
-            if not config.include_negative:
-                # Skip if any variant has negative quantity (based on display mode)
-                qty_field = 'virtual_available' if use_forecast else 'qty_available'
-                if any(
-                    stock_data.get(v.id, {}).get(qty_field, 0) < 0 
-                    for v in template_variants
-                ):
-                    continue
+                if not config.include_negative:
+                    qty_field = 'virtual_available' if use_forecast else 'qty_available'
+                    if any(stock_data.get(v.id, {}).get(qty_field, 0) < 0 for v in template_variants):
+                        continue
 
-            variant_data = []
-            for variant in template_variants:
-                stock = stock_data.get(variant.id, {})
-                
-                # Get the appropriate quantity based on the use_forecast setting
-                display_qty = stock.get('virtual_available', 0) if use_forecast else stock.get('qty_available', 0)
-                
-                variant_data.append({
-                    'id': variant.id,
-                    'name': variant.name,
-                    'default_code': variant.default_code,
-                    'qty_available': stock.get('qty_available', 0),
-                    'virtual_available': stock.get('virtual_available', 0),
-                    'display_qty': display_qty,  # This is what will be displayed
-                    'qty_reserved': stock.get('reserved_qty', 0),
-                    'incoming_qty': stock.get('incoming_qty', 0),
-                    'outgoing_qty': stock.get('outgoing_qty', 0),
-                    'image_url': variant.image_1920 and f'/web/image/product.product/{variant.id}/image_1920' or False,
-                    'product_url': f'/web#id={variant.id}&model=product.product&view_type=form',
-                    'attributes': self._get_variant_attributes(variant)
+                variant_data = []
+                for variant in template_variants:
+                    stock = stock_data.get(variant.id, {})
+                    display_qty = stock.get('virtual_available', 0) if use_forecast else stock.get('qty_available', 0)
+                    
+                    variant_data.append({
+                        'id': variant.id,
+                        'name': variant.name,
+                        'default_code': variant.default_code,
+                        'qty_available': stock.get('qty_available', 0),
+                        'virtual_available': stock.get('virtual_available', 0),
+                        'display_qty': display_qty,
+                        'qty_reserved': stock.get('reserved_qty', 0),
+                        'incoming_qty': stock.get('incoming_qty', 0),
+                        'outgoing_qty': stock.get('outgoing_qty', 0),
+                        'warehouse_name': stock.get('warehouse_name', ''),
+                        'location_name': stock.get('location_name', ''),
+                        'image_url': variant.image_1920 and f'/web/image/product.product/{variant.id}/image_1920' or False,
+                        'product_url': f'/web#id={variant.id}&model=product.product&view_type=form',
+                        'attributes': self._get_variant_attributes(variant)
+                    })
+
+                serie_products.append({
+                    'id': template.id,
+                    'name': template.name,
+                    'image_url': template.image_1920 and f'/web/image/product.template/{template.id}/image_1920' or False,
+                    'product_url': f'/web#id={template.id}&model=product.template&view_type=form',
+                    'variants': variant_data,
+                    'use_forecast': use_forecast,
+                    'serie_id': serie_group['serie_id'],
+                    'serie_name': serie_group['serie_name'],
+                    'serie_values': serie_group['serie_values']
                 })
 
-            products_data.append({
-                'id': template.id,
-                'name': template.name,
-                'image_url': template.image_1920 and f'/web/image/product.template/{template.id}/image_1920' or False,
-                'product_url': f'/web#id={template.id}&model=product.template&view_type=form',
-                'variants': variant_data,
-                'use_forecast': use_forecast  # Pass this to the frontend
-            })
+            if serie_products:
+                products_data.extend(serie_products)
 
         return products_data
 
