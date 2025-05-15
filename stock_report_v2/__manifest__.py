@@ -33,7 +33,7 @@
             # 'stock_report_v2/static/src/components/**/*',
         ],
     },
-    'post_init_hook': 'post_init_hook',
+    # 'post_init_hook': 'post_init_hook',
     'application': True,
     'installable': True,
     'auto_install': False,
