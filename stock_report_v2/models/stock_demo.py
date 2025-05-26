@@ -23,7 +23,6 @@ class StockDemoSimple(models.TransientModel):
         # Buscar ubicaciones
         locations = self.env['stock.location'].search([
             ('usage', '=', 'internal'),
-            ('company_id', '=', self.env.company.id)
         ])
         
         # Identificar central
