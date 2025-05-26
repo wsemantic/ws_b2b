@@ -16,7 +16,7 @@ action = wizard.generate_stock_demo()
     <!-- Menú en Inventario -->
     <menuitem id="menu_stock_demo_simple"
               name="Generar Stock Demo"
-              parent="stock.menu_stock_configuration"
+              parent="stock.menu_stock_root"
               action="action_stock_demo_simple"
               sequence="99"
               groups="stock.group_stock_manager"/>
