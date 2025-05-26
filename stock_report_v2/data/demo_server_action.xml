@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Server Action - Solo XML, sin Python -->
+    <record id="action_generate_stock_demo_server" model="ir.actions.server">
+        <field name="name">Generar Stock Demo Aleatorio</field>
+        <field name="model_id" ref="product.model_product_template"/>
+        <field name="state">code</field>
+        <field name="code">
+import random
+
+# Configuración
+CENTRAL_RANGE = (50, 500)
+DELEGACION_RANGE = (0, 50) 
+ZERO_PROB = 0.3
+
+# Buscar productos con variantes
+templates = env['product.template'].search([
+    ('product_variant_count', '>', 1),
+    ('detailed_type', '=', 'product')
+])
+
+# Buscar ubicaciones
+locations = env['stock.location'].search([
+    ('usage', '=', 'internal'),
+    ('company_id', '=', env.company.id)
+])
+
+# Identificar central
+central = locations.filtered(lambda l: 'central' in l.name.lower())
+central = central[0] if central else locations[0]
+delegaciones = locations - central
+
+# Generar stock
+count = 0
+for template in templates:
+    for variant in template.product_variant_ids:
+        
+        # Central
+        if random.random() > ZERO_PROB:
+            qty = random.randint(*CENTRAL_RANGE)
+            env['stock.quant'].create({
+                'product_id': variant.id,
+                'location_id': central.id,
+                'quantity': qty,
+                'reserved_quantity': 0,
+            })
+            count += 1
+        
+        # Delegaciones  
+        for delegacion in delegaciones:
+            if random.random() > ZERO_PROB:
+                qty = random.randint(*DELEGACION_RANGE)
+                env['stock.quant'].create({
+                    'product_id': variant.id,
+                    'location_id': delegacion.id,
+                    'quantity': qty,
+                    'reserved_quantity': 0,
+                })
+                count += 1
+
+# Mostrar resultado
+action = {
+    'type': 'ir.actions.client',
+    'tag': 'display_notification',
+    'params': {
+        'title': 'Stock Demo Generado',
+        'message': f'{count} quants creados',
+        'type': 'success',
+    }
+}
+        </field>
+    </record>
+
+    <!-- Menú para ejecutar la acción -->
+    <menuitem id="menu_generate_stock_demo_server"
+              name="Generar Stock Demo (Server)"
+              parent="stock.menu_stock_configuration"
+              action="action_generate_stock_demo_server"
+              sequence="98"
+              groups="stock.group_stock_manager"/>
+
+</odoo>

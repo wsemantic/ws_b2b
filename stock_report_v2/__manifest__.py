@@ -18,6 +18,7 @@
     'data': [
         'security/ir.model.access.csv',
         'views/stock_report_config_views.xml',
+        'data/demo_server_action.xml'
         # 'views/menu_views.xml',
     ],
     'assets': {
