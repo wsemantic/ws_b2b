@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    
+    <!-- Acción de menú que ejecuta directamente -->
+    <record id="action_stock_demo_simple" model="ir.actions.server">
+        <field name="name">Generar Stock Demo</field>
+        <field name="model_id" ref="product.model_product_template"/>
+        <field name="state">code</field>
+        <field name="code">
+# Crear wizard y ejecutar
+wizard = env['stock.demo.simple'].create({})
+action = wizard.generate_stock_demo()
+        </field>
+    </record>
+
+    <!-- Menú en Inventario -->
+    <menuitem id="menu_stock_demo_simple"
+              name="Generar Stock Demo"
+              parent="stock.menu_stock_configuration"
+              action="action_stock_demo_simple"
+              sequence="99"
+              groups="stock.group_stock_manager"/>
+
+</odoo>
