@@ -36,7 +36,7 @@ class ProductTemplate(models.Model):
     def _check_custom_fields(self):
         # Se ejecuta para cada producto
         for product in self:
-            if product.type == 'product':  # Solo para productos almacenable
+            if product.type == 'product' and product.available_in_pos:  # Solo para productos almacenable
                 # Validar que se haya completado el campo serie_tallas
                 if not product.attribute_serie_id:
                     raise ValidationError(_("Para los productos almacenable, el campo 'Serie Tallas' es obligatorio."))
