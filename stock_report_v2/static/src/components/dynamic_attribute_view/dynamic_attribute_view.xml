@@ -119,8 +119,13 @@
                                         </tr>
                                         
                                         <!-- Products in this group -->
-                                        <t t-foreach="serie.products" t-as="product" t-key="product.id">
+                                        <!-- <t t-foreach="serie.products" t-as="product" t-key="product.id">
                                             <t t-set="matrix" t-value="_createAttributeMatrix(product)"/>
+                                            <t t-set="matrixStock" t-value="_createAttributeMatrixStock(product)"/>
+                                            <t t-log="'matrix'"/>
+                                            <t t-log="matrix"/>
+                                            <t t-log="'matrixStock'"/>
+                                            <t t-log="matrixStock"/>
                                             <t t-if="matrix &amp;&amp; matrix.rows.length > 0">
                                                 <t t-foreach="matrix.rows" t-as="row" t-key="row.header">
                                                     <tr class="o_matrix_row">
@@ -144,7 +149,6 @@
                                                             <span t-esc="variantWithLocation ? variantWithLocation.variant.location_name : '-'"/>
                                                         </td>
                                         
-                                                        <!-- Display cells for each size column -->
                                                         <t t-foreach="Array(max_serie_count).fill(0).map((_, i) => i)" t-as="index" t-key="index">
                                                             <td class="o_quantity_cell text-center">
                                                                 <t t-if="index &lt; serie.serie_values.length">
@@ -154,6 +158,55 @@
                                                                         <span class="o_quantity" t-att-class="getVariantCellClass(cell)" 
                                                                               t-on-click="() => this.handleCellClick(cell, product.id)" 
                                                                               t-esc="formatQty(cell.qty)"/>
+                                                                    </t>
+                                                                    <t t-else="">
+                                                                        <span class="o_quantity o_no_quantity">-</span>
+                                                                    </t>
+                                                                </t>
+                                                                <t t-else="">
+                                                                    <span class="o_quantity o_no_quantity">-</span>
+                                                                </t>
+                                                            </td>
+                                                        </t>
+                                                    </tr>
+                                                </t>
+                                            </t>
+                                        </t> -->
+                                        <t t-foreach="serie.products" t-as="product" t-key="product.id">
+                                            <t t-set="matrix" t-value="_createAttributeMatrixStock(product)"/>
+                                            <t t-log="'matrix'"/>
+                                            <t t-log="matrix"/>
+                                            <t t-if="matrix &amp;&amp; matrix.rows.length > 0">
+                                                <t t-foreach="matrix.rows" t-as="row" t-key="row.header + '_' + row.location_id">
+                                                    <tr class="o_matrix_row">
+                                                        <t t-if="row_index == 0">
+                                                            <td t-if="state.config &amp;&amp; state.config.show_images" class="o_image_cell" t-att-rowspan="matrix.rows.length">
+                                                                <img t-att-src="product.image_url || '/stock_report_v2/static/src/img/no-image-found.png'" class="o_product_image" t-att-data-product-id="product.id" style="width: 120px; height: 120px; object-fit: contain;"/>
+                                                            </td>
+                                                        </t>
+                                                        <td class="o_name_cell">
+                                                            <a t-att-href="product.product_url" target="_blank" class="fw-medium" t-esc="product.name"/>
+                                                        </td>
+                                                        <td class="o_primary_value_cell fw-medium">
+                                                            <span t-esc="row.header"/>
+                                                        </td>
+                                                        <td class="o_warehouse_cell text-center">
+                                                            <span t-esc="row.warehouse_name || '-'"/>
+                                                        </td>
+                                                        <td class="o_location_cell text-center">
+                                                            <span t-esc="row.location_name || '-'"/>
+                                                        </td>
+
+                                                        <!-- Display cells for each size column -->
+                                                        <t t-foreach="Array(max_serie_count).fill(0).map((_, i) => i)" t-as="index" t-key="index">
+                                                            <td class="o_quantity_cell text-center">
+                                                                <t t-if="index &lt; serie.serie_values.length">
+                                                                    <t t-set="value" t-value="serie.serie_values[index]"/>
+                                                                    <t t-set="cell" t-value="getCellForSerieValue(row, value, row.location_id)"/>
+                                                                    <t t-if="cell">
+                                                                        <span class="o_quantity" t-att-class="getVariantCellClass(cell)" 
+                                                                            t-on-click="() => this.handleCellClick(cell, product.id)" 
+                                                                            t-esc="formatQty(cell.qty)"/>
                                                                     </t>
                                                                     <t t-else="">
                                                                         <span class="o_quantity o_no_quantity">-</span>

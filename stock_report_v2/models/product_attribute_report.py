@@ -206,13 +206,13 @@ class ProductAttributeReport(models.Model):
 
     def _get_stock_data(self, variant_ids, use_forecast=False):
         """
-        Get detailed stock data for variants, including correct incoming and outgoing quantities.
-        If use_forecast is True, virtual_available will be calculated as:
-        qty_available + incoming_qty - outgoing_qty
+        Get detailed stock data for variants:
+        - Top-level fields reflect the location with highest quantity.
+        - location_data key holds all warehouse-location-wise quantities.
         """
         stock_data = {}
-        
-        # Initialize stock data structure for all variants to ensure consistency
+
+        # Initialize stock data structure for all variants
         for variant_id in variant_ids:
             stock_data[variant_id] = {
                 'qty_available': 0.0,
@@ -221,57 +221,73 @@ class ProductAttributeReport(models.Model):
                 'outgoing_qty': 0.0,
                 'virtual_available': 0.0,
                 'warehouse_name': '',
-                'location_name': ''
+                'location_name': '',
+                'location_data': []  # NEW: detailed data
             }
 
-        # Get quants data with location information
+        # === MAIN LOGIC: Fetch location-wise stock ===
         self.env.cr.execute("""
-            WITH grouped_stock AS (
-                SELECT 
-                    sq.product_id,
-                    sl.name as location_name,
-                    sw.name as warehouse_name,
-                    SUM(sq.quantity) as total_quantity,
-                    SUM(sq.reserved_quantity) as total_reserved
-                FROM stock_quant sq
-                JOIN stock_location sl ON sq.location_id = sl.id
-                LEFT JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
-                WHERE sq.product_id IN %s
-                AND sl.usage = 'internal'
-                AND sq.quantity > 0
-                GROUP BY sq.product_id, sl.name, sw.name
+            WITH wh_locations AS (
+                SELECT
+                    sw.id AS warehouse_id,
+                    sw.name AS warehouse_name,
+                    sl_child.id AS location_id,
+                    sl_child.name AS location_name,
+                    sw.view_location_id,
+                    sw.company_id
+                FROM stock_warehouse sw
+                JOIN stock_location sl_parent ON sl_parent.id = sw.view_location_id
+                JOIN stock_location sl_child ON sl_child.parent_path LIKE sl_parent.parent_path || '%%'
+                WHERE sl_child.usage = 'internal'
             ),
-            ranked_locations AS (
-                SELECT 
-                    product_id,
-                    location_name,
-                    warehouse_name,
-                    total_quantity,
-                    total_reserved,
-                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY total_quantity DESC) as rn
-                FROM grouped_stock
+            stock_data AS (
+                SELECT
+                    sq.location_id,
+                    sq.product_id,
+                    wl.location_name,
+                    wl.warehouse_name,
+                    SUM(sq.quantity) AS qty_available,
+                    SUM(sq.reserved_quantity) AS reserved_qty
+                FROM stock_quant sq
+                JOIN wh_locations wl ON wl.location_id = sq.location_id
+                WHERE sq.product_id IN %s
+                GROUP BY sq.location_id, sq.product_id, wl.location_name, wl.warehouse_name
+            ),
+            ranked AS (
+                SELECT *,
+                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) AS rn
+                FROM stock_data
             )
-            SELECT 
-                product_id,
-                SUM(total_quantity) OVER (PARTITION BY product_id) as total_quantity,
-                SUM(total_reserved) OVER (PARTITION BY product_id) as total_reserved,
-                location_name,
-                warehouse_name
-            FROM ranked_locations
-            WHERE rn = 1
+            SELECT * FROM ranked
         """, (tuple(variant_ids),))
-        
-        quant_data = self.env.cr.dictfetchall()
 
-        for item in quant_data:
-            product_id = item['product_id']
-            stock_data[product_id].update({
-                'qty_available': item['total_quantity'] or 0.0,
-                'reserved_qty': item['total_reserved'] or 0.0,
-                'virtual_available': item['total_quantity'] or 0.0,
-                'warehouse_name': item['warehouse_name'] or '',
-                'location_name': item['location_name'] or ''
+        rows = self.env.cr.dictfetchall()
+
+        for row in rows:
+            product_id = row['product_id']
+            if product_id not in stock_data:
+                continue  # safety check
+
+            # Add full breakdown
+            stock_data[product_id]['location_data'].append({
+                'location_id': row['location_id'],
+                'location_name': row['location_name'],
+                'warehouse_name': row['warehouse_name'],
+                'qty_available': row['qty_available'] or 0.0,
+                'reserved_qty': row['reserved_qty'] or 0.0,
+                'virtual_available': (row['qty_available'] or 0.0)
             })
+
+            # Fill flat fields only for top-ranked location
+            if row['rn'] == 1:
+                stock_data[product_id].update({
+                    'qty_available': row['qty_available'] or 0.0,
+                    'reserved_qty': row['reserved_qty'] or 0.0,
+                    'virtual_available': row['qty_available'] or 0.0,
+                    'warehouse_name': row['warehouse_name'] or '',
+                    'location_name': row['location_name'] or ''
+                })
+
 
         # Get incoming moves - all expected incoming stock
         incoming_domain = [
@@ -390,7 +406,8 @@ class ProductAttributeReport(models.Model):
                         'location_name': stock.get('location_name', ''),
                         'image_url': variant.image_1920 and f'/web/image/product.product/{variant.id}/image_1920' or False,
                         'product_url': f'/web#id={variant.id}&model=product.product&view_type=form',
-                        'attributes': self._get_variant_attributes(variant)
+                        'attributes': self._get_variant_attributes(variant),
+                        'location_data': stock.get('location_data', [])
                     })
 
                 serie_products.append({
