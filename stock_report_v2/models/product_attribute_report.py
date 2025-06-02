@@ -227,38 +227,59 @@ class ProductAttributeReport(models.Model):
 
         # === MAIN LOGIC: Fetch location-wise stock ===
         self.env.cr.execute("""
-            WITH wh_locations AS (
-                SELECT
-                    sw.id AS warehouse_id,
-                    sw.name AS warehouse_name,
-                    sl_child.id AS location_id,
-                    sl_child.name AS location_name,
-                    sw.view_location_id,
-                    sw.company_id
-                FROM stock_warehouse sw
-                JOIN stock_location sl_parent ON sl_parent.id = sw.view_location_id
-                JOIN stock_location sl_child ON sl_child.parent_path LIKE sl_parent.parent_path || '%%'
-                WHERE sl_child.usage = 'internal'
-            ),
-            stock_data AS (
-                SELECT
-                    sq.location_id,
-                    sq.product_id,
-                    wl.location_name,
-                    wl.warehouse_name,
-                    SUM(sq.quantity) AS qty_available,
-                    SUM(sq.reserved_quantity) AS reserved_qty
-                FROM stock_quant sq
-                JOIN wh_locations wl ON wl.location_id = sq.location_id
-                WHERE sq.product_id IN %s
-                GROUP BY sq.location_id, sq.product_id, wl.location_name, wl.warehouse_name
-            ),
-            ranked AS (
-                SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) AS rn
-                FROM stock_data
-            )
-            SELECT * FROM ranked
+        WITH quant_locations AS (
+            SELECT
+                sq.product_id,
+                sl.id AS location_id,
+                sl.name AS loc_name,
+                parent.name AS parent_name,
+                sl.parent_path,
+                sl.company_id,
+                SUM(sq.quantity) AS qty_available,
+                SUM(sq.reserved_quantity) AS reserved_qty
+            FROM stock_quant sq
+            JOIN stock_location sl ON sl.id = sq.location_id
+            LEFT JOIN stock_location parent ON sl.location_id = parent.id
+            WHERE sq.product_id IN %s 
+            AND sl.usage = 'internal'
+            GROUP BY sq.product_id, sl.id, sl.name, parent.name, sl.parent_path, sl.company_id
+        ),
+        warehouse_map AS (
+            SELECT 
+                sw.name AS warehouse_name,
+                sl.parent_path AS view_path,
+                sw.company_id
+            FROM stock_warehouse sw
+            JOIN stock_location sl ON sw.view_location_id = sl.id
+        ),
+        with_warehouse AS (
+            SELECT
+                ql.product_id,
+                ql.location_id,
+                COALESCE(ql.parent_name || ' / ', '') || ql.loc_name AS location_name,
+                ql.qty_available,
+                ql.reserved_qty,
+                COALESCE(wm.warehouse_name, 'Unassigned') AS warehouse_name
+            FROM quant_locations ql
+            LEFT JOIN warehouse_map wm 
+                ON wm.company_id = ql.company_id
+                AND ql.parent_path LIKE wm.view_path || '%%'
+        ),
+        ranked AS (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) AS rn
+            FROM with_warehouse
+        )
+        SELECT 
+            product_id,
+            location_id,
+            location_name,
+            warehouse_name,
+            qty_available,
+            reserved_qty,
+            rn
+        FROM ranked
+        ORDER BY product_id, rn;
         """, (tuple(variant_ids),))
 
         rows = self.env.cr.dictfetchall()

@@ -190,10 +190,10 @@
                                                         <td class="o_primary_value_cell fw-medium">
                                                             <span t-esc="row.header"/>
                                                         </td>
-                                                        <td class="o_warehouse_cell text-center">
+                                                        <td class="o_warehouse_cell">
                                                             <span t-esc="row.warehouse_name || '-'"/>
                                                         </td>
-                                                        <td class="o_location_cell text-center">
+                                                        <td class="o_location_cell">
                                                             <span t-esc="row.location_name || '-'"/>
                                                         </td>
 
