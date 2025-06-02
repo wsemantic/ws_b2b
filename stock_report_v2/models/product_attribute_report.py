@@ -227,37 +227,41 @@ class ProductAttributeReport(models.Model):
 
         # === MAIN LOGIC: Fetch location-wise stock ===
         self.env.cr.execute("""
-            WITH wh_locations AS (
-                SELECT
-                    sw.id AS warehouse_id,
-                    sw.name AS warehouse_name,
-                    sl_child.id AS location_id,
-                    sl_child.name AS location_name,
-                    sw.view_location_id,
-                    sw.company_id
-                FROM stock_warehouse sw
-                JOIN stock_location sl_parent ON sl_parent.id = sw.view_location_id
-                WHERE sl_child.usage = 'internal'
+            WITH grouped_stock AS (
+            	SELECT 
+            		sq.location_id,
+            		sq.product_id,
+            		sl.name as location_name,
+            		sw.name as warehouse_name,
+            		SUM(sq.quantity) as qty_available,
+            		SUM(sq.reserved_quantity) as reserved_qty
+            	FROM stock_quant sq
+            	JOIN stock_location sl ON sq.location_id = sl.id
+            	LEFT JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
+            	WHERE sq.product_id IN %s
+            	AND sl.usage = 'internal'
+            	AND sq.quantity > 0
+            	GROUP BY sq.location_id, sq.product_id, sl.name, sw.name
             ),
-            stock_data AS (
-                SELECT
-                    sq.location_id,
-                    sq.product_id,
-                    wl.location_name,
-                    wl.warehouse_name,
-                    SUM(sq.quantity) AS qty_available,
-                    SUM(sq.reserved_quantity) AS reserved_qty
-                FROM stock_quant sq
-                JOIN wh_locations wl ON wl.location_id = sq.location_id
-                WHERE sq.product_id IN %s
-                GROUP BY sq.location_id, sq.product_id, wl.location_name, wl.warehouse_name
-            ),
-            ranked AS (
-                SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) AS rn
-                FROM stock_data
+            ranked_locations AS (
+            	SELECT 
+            	location_id,
+            		product_id,
+            		location_name,
+            		warehouse_name,
+            		qty_available,
+            		reserved_qty,
+            		ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) as rn
+            	FROM grouped_stock
             )
-            SELECT * FROM ranked
+            SELECT 
+            	location_id,
+            	product_id,
+            	SUM(qty_available) OVER (PARTITION BY product_id) as qty_available,
+            	SUM(reserved_qty) OVER (PARTITION BY product_id) as reserved_qty,
+            	location_name,
+            	warehouse_name
+            FROM ranked_locations;
         """, (tuple(variant_ids),))
 
         rows = self.env.cr.dictfetchall()
