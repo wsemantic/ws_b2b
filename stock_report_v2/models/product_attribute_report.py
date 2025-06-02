@@ -237,7 +237,6 @@ class ProductAttributeReport(models.Model):
                     sw.company_id
                 FROM stock_warehouse sw
                 JOIN stock_location sl_parent ON sl_parent.id = sw.view_location_id
-                JOIN stock_location sl_child ON sl_child.parent_path LIKE sl_parent.parent_path || '%%'
                 WHERE sl_child.usage = 'internal'
             ),
             stock_data AS (
