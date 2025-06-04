@@ -57,6 +57,21 @@
                         <button class="btn btn-primary" t-on-click="refreshData" aria-label="Refresh">
                             <i class="fa fa-refresh me-1"/>Refresh
                         </button>
+                        <div class="o_pagination_controls">
+                                <ul class="pagination mb-0">
+                                    <li class="page-item" t-att-class="state.currentPage == 1 ? 'disabled' : ''">
+                                        <a class="page-link" href="#" t-on-click.prevent="prevPage">&#171;</a>
+                                    </li>
+                                    <li class="page-item active">
+                                        <span class="page-link">
+                                            <t t-esc="state.currentPage"/>
+                                        </span>
+                                    </li>
+                                    <li class="page-item" t-att-class="state.currentPage == state.totalPages ? 'disabled' : ''">
+                                        <a class="page-link" href="#" t-on-click.prevent="nextPage">&#187;</a>
+                                    </li>
+                                </ul>
+                            </div>
                     </div>
                 </div>
 
@@ -226,26 +241,11 @@
                             </table>
                         </div>
 
-                        <div class="o_pagination d-flex justify-content-between align-items-center mt-2">
+                        <!-- <div class="o_pagination d-flex justify-content-between align-items-center mt-2">
                             <div class="o_pagination_info">
                                 Showing Page: <t t-esc="state.currentPage"/> of <t t-esc="state.totalPages"/>
                             </div>
-                            <div class="o_pagination_controls">
-                                <ul class="pagination mb-0">
-                                    <li class="page-item" t-att-class="state.currentPage == 1 ? 'disabled' : ''">
-                                        <a class="page-link" href="#" t-on-click.prevent="prevPage">&#171;</a>
-                                    </li>
-                                    <li class="page-item active">
-                                        <span class="page-link">
-                                            <t t-esc="state.currentPage"/>
-                                        </span>
-                                    </li>
-                                    <li class="page-item" t-att-class="state.currentPage == state.totalPages ? 'disabled' : ''">
-                                        <a class="page-link" href="#" t-on-click.prevent="nextPage">&#187;</a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
+                        </div> -->
                     </div>
                 </t>
 
