@@ -181,6 +181,8 @@ export class DynamicAttributeView extends Component {
             
             .o_excess_qty_cell {
                 background-color: #33ADFF !important;
+                color: white;
+                font-weight: 500; 
             }
         `;
         document.head.appendChild(styleEl);
