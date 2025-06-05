@@ -29,90 +29,6 @@ class ProductAttributeReport(models.Model):
     reserved_qty = fields.Float(string='Reserved', readonly=True, digits='Product Unit of Measure')
     uom_id = fields.Many2one('uom.uom', string='Unit of Measure', readonly=True)
 
-    def init(self):
-        tools.drop_view_if_exists(self.env.cr, self._table)
-        self.env.cr.execute("""
-            CREATE OR REPLACE VIEW %s AS (
-                WITH stock_data AS (
-                    SELECT 
-                        sq.product_id,
-                        SUM(sq.quantity) as qty_available,
-                        SUM(sq.reserved_quantity) as reserved_qty,
-                        sl.name as location_name,
-                        sw.name as warehouse_name
-                    FROM stock_quant sq
-                    JOIN stock_location sl ON sq.location_id = sl.id
-                    JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
-                    WHERE sl.usage = 'internal'
-                    GROUP BY sq.product_id, sl.name, sw.name
-                ),
-                incoming_data AS (
-                    SELECT
-                        product_id,
-                        SUM(product_qty) as incoming_qty
-                    FROM stock_move
-                    WHERE state IN ('assigned', 'confirmed', 'waiting')
-                    AND location_dest_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
-                    AND location_id NOT IN (SELECT id FROM stock_location WHERE usage = 'internal')
-                    GROUP BY product_id
-                ),
-                outgoing_data AS (
-                    SELECT
-                        product_id,
-                        SUM(product_qty) as outgoing_qty
-                    FROM stock_move
-                    WHERE state IN ('assigned', 'confirmed', 'waiting')
-                    AND location_id IN (SELECT id FROM stock_location WHERE usage = 'internal')
-                    AND location_dest_id NOT IN (SELECT id FROM stock_location WHERE usage != 'internal')
-                    GROUP BY product_id
-                ),
-                serie_values AS (
-                    SELECT 
-                        pt.id as template_id,
-                        asi.attribute_value_id,
-                        pav.name as value_name,
-                        asi.sequence
-                    FROM product_template pt
-                    JOIN attribute_serie wsas ON pt.attribute_serie_id = wsas.id
-                    JOIN attribute_serie_item asi ON asi.attribute_serie_id = wsas.id
-                    JOIN product_attribute_value pav ON asi.attribute_value_id = pav.id
-                )
-                SELECT
-                    ROW_NUMBER() OVER() AS id,
-                    pp.id AS product_id,
-                    pt.id AS product_tmpl_id,
-                    pt.name AS product_name,
-                    pp.default_code AS default_code,
-                    pa.id AS attribute_id,
-                    pa.name AS attribute_name,
-                    pav.id AS attribute_value_id,
-                    pav.name AS attribute_value,
-                    COALESCE(sd.qty_available, 0) AS qty_available,
-                    COALESCE(sd.qty_available, 0) + COALESCE(id.incoming_qty, 0) - COALESCE(od.outgoing_qty, 0) AS virtual_available,
-                    COALESCE(id.incoming_qty, 0) AS incoming_qty, 
-                    COALESCE(od.outgoing_qty, 0) AS outgoing_qty,
-                    COALESCE(sd.reserved_qty, 0) AS reserved_qty,
-                    pt.uom_id AS uom_id,
-                    sd.warehouse_name,
-                    sd.location_name,
-                    pt.attribute_serie_id,
-                    wsas.name as serie_name,
-                    sv.attribute_value_id as serie_value_id,
-                    sv.value_name as serie_value_name
-                FROM product_product pp
-                JOIN product_template pt ON pp.product_tmpl_id = pt.id
-                LEFT JOIN product_template_attribute_value ptav ON ptav.product_tmpl_id = pt.id AND ptav.product_attribute_value_id IS NOT NULL
-                LEFT JOIN product_attribute_value pav ON ptav.product_attribute_value_id = pav.id
-                LEFT JOIN product_attribute pa ON pav.attribute_id = pa.id
-                LEFT JOIN stock_data sd ON pp.id = sd.product_id
-                LEFT JOIN incoming_data id ON pp.id = id.product_id
-                LEFT JOIN outgoing_data od ON pp.id = od.product_id
-                LEFT JOIN attribute_serie wsas ON pt.attribute_serie_id = wsas.id
-                LEFT JOIN serie_values sv ON sv.template_id = pt.id
-                WHERE pt.active = true AND pt.type = 'product'
-                ORDER BY pt.id, sv.sequence
-            )
-        """ % self._table)
 
 # ... existing code ...
     @api.model
@@ -206,13 +122,13 @@ class ProductAttributeReport(models.Model):
 
     def _get_stock_data(self, variant_ids, use_forecast=False):
         """
-        Get detailed stock data for variants, including correct incoming and outgoing quantities.
-        If use_forecast is True, virtual_available will be calculated as:
-        qty_available + incoming_qty - outgoing_qty
+        Get detailed stock data for variants:
+        - Top-level fields reflect the location with highest quantity.
+        - location_data key holds all warehouse-location-wise quantities.
         """
         stock_data = {}
-        
-        # Initialize stock data structure for all variants to ensure consistency
+
+        # Initialize stock data structure for all variants
         for variant_id in variant_ids:
             stock_data[variant_id] = {
                 'qty_available': 0.0,
@@ -221,57 +137,94 @@ class ProductAttributeReport(models.Model):
                 'outgoing_qty': 0.0,
                 'virtual_available': 0.0,
                 'warehouse_name': '',
-                'location_name': ''
+                'location_name': '',
+                'location_data': []  # NEW: detailed data
             }
 
-        # Get quants data with location information
+        # === MAIN LOGIC: Fetch location-wise stock ===
         self.env.cr.execute("""
-            WITH grouped_stock AS (
-                SELECT 
-                    sq.product_id,
-                    sl.name as location_name,
-                    sw.name as warehouse_name,
-                    SUM(sq.quantity) as total_quantity,
-                    SUM(sq.reserved_quantity) as total_reserved
-                FROM stock_quant sq
-                JOIN stock_location sl ON sq.location_id = sl.id
-                LEFT JOIN stock_warehouse sw ON sl.warehouse_id = sw.id
-                WHERE sq.product_id IN %s
-                AND sl.usage = 'internal'
-                AND sq.quantity > 0
-                GROUP BY sq.product_id, sl.name, sw.name
-            ),
-            ranked_locations AS (
-                SELECT 
-                    product_id,
-                    location_name,
-                    warehouse_name,
-                    total_quantity,
-                    total_reserved,
-                    ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY total_quantity DESC) as rn
-                FROM grouped_stock
-            )
+        WITH quant_locations AS (
+            SELECT
+                sq.product_id,
+                sl.id AS location_id,
+                sl.name AS loc_name,
+                parent.name AS parent_name,
+                sl.parent_path,
+                sl.company_id,
+                SUM(sq.quantity) AS qty_available,
+                SUM(sq.reserved_quantity) AS reserved_qty
+            FROM stock_quant sq
+            JOIN stock_location sl ON sl.id = sq.location_id
+            LEFT JOIN stock_location parent ON sl.location_id = parent.id
+            WHERE sq.product_id IN %s 
+            AND sl.usage = 'internal'
+            GROUP BY sq.product_id, sl.id, sl.name, parent.name, sl.parent_path, sl.company_id
+        ),
+        warehouse_map AS (
             SELECT 
-                product_id,
-                SUM(total_quantity) OVER (PARTITION BY product_id) as total_quantity,
-                SUM(total_reserved) OVER (PARTITION BY product_id) as total_reserved,
-                location_name,
-                warehouse_name
-            FROM ranked_locations
-            WHERE rn = 1
+                sw.name AS warehouse_name,
+                sl.parent_path AS view_path,
+                sw.company_id
+            FROM stock_warehouse sw
+            JOIN stock_location sl ON sw.view_location_id = sl.id
+        ),
+        with_warehouse AS (
+            SELECT
+                ql.product_id,
+                ql.location_id,
+                COALESCE(ql.parent_name || ' / ', '') || ql.loc_name AS location_name,
+                ql.qty_available,
+                ql.reserved_qty,
+                COALESCE(wm.warehouse_name, 'Unassigned') AS warehouse_name
+            FROM quant_locations ql
+            LEFT JOIN warehouse_map wm 
+                ON wm.company_id = ql.company_id
+                AND ql.parent_path LIKE wm.view_path || '%%'
+        ),
+        ranked AS (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY qty_available DESC) AS rn
+            FROM with_warehouse
+        )
+        SELECT 
+            product_id,
+            location_id,
+            location_name,
+            warehouse_name,
+            qty_available,
+            reserved_qty,
+            rn
+        FROM ranked
+        ORDER BY product_id, rn;
         """, (tuple(variant_ids),))
-        
-        quant_data = self.env.cr.dictfetchall()
 
-        for item in quant_data:
-            product_id = item['product_id']
-            stock_data[product_id].update({
-                'qty_available': item['total_quantity'] or 0.0,
-                'reserved_qty': item['total_reserved'] or 0.0,
-                'virtual_available': item['total_quantity'] or 0.0,
-                'warehouse_name': item['warehouse_name'] or '',
-                'location_name': item['location_name'] or ''
+        rows = self.env.cr.dictfetchall()
+
+        for row in rows:
+            product_id = row['product_id']
+            if product_id not in stock_data:
+                continue  # safety check
+
+            # Add full breakdown
+            stock_data[product_id]['location_data'].append({
+                'location_id': row['location_id'],
+                'location_name': row['location_name'],
+                'warehouse_name': row['warehouse_name'],
+                'qty_available': row['qty_available'] or 0.0,
+                'reserved_qty': row['reserved_qty'] or 0.0,
+                'virtual_available': (row['qty_available'] or 0.0)
             })
+
+            # Fill flat fields only for top-ranked location
+            if row['rn'] == 1:
+                stock_data[product_id].update({
+                    'qty_available': row['qty_available'] or 0.0,
+                    'reserved_qty': row['reserved_qty'] or 0.0,
+                    'virtual_available': row['qty_available'] or 0.0,
+                    'warehouse_name': row['warehouse_name'] or '',
+                    'location_name': row['location_name'] or ''
+                })
+
 
         # Get incoming moves - all expected incoming stock
         incoming_domain = [
@@ -390,7 +343,8 @@ class ProductAttributeReport(models.Model):
                         'location_name': stock.get('location_name', ''),
                         'image_url': variant.image_1920 and f'/web/image/product.product/{variant.id}/image_1920' or False,
                         'product_url': f'/web#id={variant.id}&model=product.product&view_type=form',
-                        'attributes': self._get_variant_attributes(variant)
+                        'attributes': self._get_variant_attributes(variant),
+                        'location_data': stock.get('location_data', [])
                     })
 
                 serie_products.append({

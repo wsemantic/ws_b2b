@@ -579,24 +579,53 @@ export class DynamicAttributeView extends Component {
         return Math.max(5, maxCount);
     }
     
-    getCellForSerieValue(row, serieValue) {
-        if (!row || !row.cells) return null;
+    // getCellForSerieValue(row, serieValue, location_id) {
+    //     if (!row || !row.cells) return null;
         
-        // Find a cell where the variant has a matching serie_value (size)
-        const cell = row.cells.find(c => 
-            c && c.variant && c.variant.serie_value === serieValue
-        );
+    //     // Find a cell where the variant has a matching serie_value (size)
+    //     const cell = row.cells.find(c => 
+    //         c && c.variant && c.variant.serie_value === serieValue
+    //     );
         
-        if (!cell) return null;
+    //     if (!cell) return null;
         
-        const qtyField = this.state.config && this.state.config.use_forecast ? 
-            'virtual_available' : 'qty_available';
+    //     const qtyField = this.state.config && this.state.config.use_forecast ? 
+    //         'virtual_available' : 'qty_available';
             
-        return {
-            qty: cell.variant[qtyField] || 0,
-            variant: cell.variant
-        };
+    //     return {
+    //         qty: cell.variant[qtyField] || 0,
+    //         variant: cell.variant
+    //     };
+    // }
+    
+    getCellForSerieValue(row, serieValue, location_id) {
+    if (!row || !row.cells) return null;
+    
+    // Find a cell where the variant has a matching serie_value (size)
+    const cell = row.cells.find(c => 
+        c && c.variant && c.variant.serie_value === serieValue
+    );
+    
+    if (!cell) return null;
+    
+    // FIXED: Get quantity from the specific location_data that matches the location_id
+    let qty = 0;
+    
+    if (cell.variant && cell.variant.location_data) {
+        // Check if location_data matches the requested location_id
+        if (cell.variant.location_data.location_id === location_id) {
+            const qtyField = this.state.config && this.state.config.use_forecast ? 
+                'virtual_available' : 'qty_available';
+            
+            qty = cell.variant.location_data[qtyField] || cell.variant.location_data.qty_available || 0;
+        }
     }
+    
+    return {
+        qty: qty,
+        variant: cell.variant
+    };
+}
 
     _createAttributeMatrix(product) {
         if (!this.state.attributes.length || !product.variants?.length) return null;
@@ -688,6 +717,163 @@ export class DynamicAttributeView extends Component {
 
         return {
             rows,
+            column_headers: serieValues
+        };
+    }
+
+    _createAttributeMatrixStock(product) {
+        if (!this.state.attributes.length || !product.variants?.length) return null;
+        
+        const [primaryAttr, secondaryAttr] = this.state.attributes;
+        if (!primaryAttr) return null;
+
+        // Get all primary attribute values (colors)
+        const primaryValues = primaryAttr.values.map(v => ({
+            id: v.id,
+            name: v.name || v.display_name
+        }));
+
+        // Get all unique serie values for this product (sizes)
+        const serieValues = product.serie_values || [];
+        
+        // Collect all unique locations from all variants
+        const locationMap = new Map();
+        
+        product.variants.forEach(variant => {
+            if (variant.location_data && Array.isArray(variant.location_data)) {
+                variant.location_data.forEach(locationInfo => {
+                    if (!locationMap.has(locationInfo.location_id)) {
+                        locationMap.set(locationInfo.location_id, {
+                            id: locationInfo.location_id,
+                            name: locationInfo.location_name,
+                            warehouse_name: locationInfo.warehouse_name
+                        });
+                    }
+                });
+            }
+        });
+
+        // Convert location map to array and sort by name for consistent ordering
+        const locations = Array.from(locationMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+        // Identify which attribute is the size attribute
+        const sizeAttribute = secondaryAttr || 
+            this.state.attributes.find(attr => 
+                attr.name.toLowerCase().includes('size') || 
+                attr.name.toLowerCase().includes('talla') ||
+                attr.name.toLowerCase().includes('tamaño')
+            );
+
+        // Create a flattened structure: variant + location combinations
+        const variantLocationCombinations = [];
+        
+        product.variants.forEach(variant => {
+            if (variant.location_data && Array.isArray(variant.location_data)) {
+                variant.location_data.forEach(locationData => {
+                    // Get the color for this variant
+                    const colorId = variant.attributes?.[String(primaryAttr.id)];
+                    const colorValue = primaryValues.find(pv => pv.id === colorId);
+                    
+                    if (!colorValue) return;
+                    
+                    // Get the size for this variant
+                    let variantSize = variant.serie_value;
+                    
+                    if (sizeAttribute && variant.attributes) {
+                        const sizeAttrId = String(sizeAttribute.id);
+                        const sizeValueId = variant.attributes[sizeAttrId];
+                        
+                        if (sizeValueId) {
+                            const sizeVal = sizeAttribute.values.find(v => v.id === sizeValueId);
+                            if (sizeVal) {
+                                variantSize = sizeVal.name;
+                            }
+                        }
+                    }
+                    
+                    console.log(`Adding combination: Variant ${variant.id}, Color: ${colorValue.name}, Size: ${variantSize}, Location: ${locationData.location_name}, Qty: ${locationData.qty_available}`);
+                    
+                    variantLocationCombinations.push({
+                        variant: variant,
+                        locationData: locationData,
+                        colorValue: colorValue,
+                        size: variantSize,
+                        locationId: locationData.location_id
+                    });
+                });
+            }
+        });
+
+        // Group by color and location
+        const colorLocationGroups = new Map();
+        
+        variantLocationCombinations.forEach(combo => {
+            const key = `${combo.colorValue.id}_${combo.locationId}`;
+            
+            if (!colorLocationGroups.has(key)) {
+                colorLocationGroups.set(key, {
+                    colorValue: combo.colorValue,
+                    locationId: combo.locationId,
+                    locationName: combo.locationData.location_name,
+                    warehouseName: combo.locationData.warehouse_name,
+                    variants: []
+                });
+            }
+            
+            colorLocationGroups.get(key).variants.push(combo);
+        });
+
+        // Create rows: For each color-location combination
+        const rows = [];
+        
+        Array.from(colorLocationGroups.values()).forEach(group => {
+            // Create cells for each size
+            const cells = serieValues.map(sizeValue => {
+                // Find the variant-location combination that matches this size
+                const matchingCombo = group.variants.find(combo => combo.size === sizeValue);
+                
+                if (!matchingCombo) {
+                    return {
+                        qty: 0,
+                        variant: null
+                    };
+                }
+
+                // Set quantity field based on config - use the specific location data
+                const qtyField = this.state.config && this.state.config.use_forecast ? 
+                    'virtual_available' : 'qty_available';
+                
+                // IMPORTANT: Use the quantity from the specific location data, not from the variant
+                // Make sure we're accessing the correct property from location_data
+                const qty = matchingCombo.locationData[qtyField] || matchingCombo.locationData.qty_available || 0;
+                
+                console.log(`Location: ${matchingCombo.locationData.location_name}, Size: ${sizeValue}, Qty: ${qty}`, matchingCombo.locationData);
+                
+                return {
+                    qty: qty,
+                    variant: {
+                        ...matchingCombo.variant,
+                        serie_value: sizeValue,
+                        location_data: matchingCombo.locationData // Include the specific location data
+                    }
+                };
+            });
+
+            // Only add row if it has some stock
+            if (cells.some(cell => cell.qty > 0)) {
+                rows.push({
+                    header: group.colorValue.name, // Color name
+                    color_name: group.colorValue.name,
+                    location_id: group.locationId,
+                    location_name: group.locationName,
+                    warehouse_name: group.warehouseName,
+                    cells: cells
+                });
+            }
+        });
+
+        return {
+            rows: rows,
             column_headers: serieValues
         };
     }
