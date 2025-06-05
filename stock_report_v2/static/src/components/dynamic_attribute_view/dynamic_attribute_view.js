@@ -871,7 +871,20 @@ export class DynamicAttributeView extends Component {
                 });
             }
         });
+        rows.sort((a, b) => {
+            const wa = a.warehouse_name?.toLowerCase() || '';
+            const wb = b.warehouse_name?.toLowerCase() || '';
+            const la = a.location_name?.toLowerCase() || '';
+            const lb = b.location_name?.toLowerCase() || '';
 
+            if (wa < wb) return -1;
+            if (wa > wb) return 1;
+            if (la < lb) return -1;
+            if (la > lb) return 1;
+            return 0;
+        });
+
+        console.log(rows,'row')
         return {
             rows: rows,
             column_headers: serieValues
