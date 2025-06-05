@@ -170,6 +170,18 @@ export class DynamicAttributeView extends Component {
             .o_serie_value_col {
                 min-width: 80px;
             }
+
+            .o_low_qty_cell {
+                background-color: #FFFFB3 !important;
+            }
+            
+            .o_medium_qty_cell {
+                background-color: #c8e6c9 !important;
+            }
+            
+            .o_excess_qty_cell {
+                background-color: #33ADFF !important;
+            }
         `;
         document.head.appendChild(styleEl);
     }
@@ -238,12 +250,10 @@ export class DynamicAttributeView extends Component {
     
 
     _transformProducts(products) {
-        console.log('Transforming products:', products);
         
         return products.map(product => {
             // Extract all unique serie values from the product
             const serieValues = product.serie_values || [];
-            console.log('Product serie_values:', product.id, serieValues);
             
             return {
                 ...product,
@@ -258,7 +268,6 @@ export class DynamicAttributeView extends Component {
                         variant.serie_value = variant.attribute_value || serieValues[0];
                     }
                     
-                    console.log('Variant:', variant.id, 'serie_value:', variant.serie_value);
                     
                     return {
                         ...variant,
@@ -344,7 +353,7 @@ export class DynamicAttributeView extends Component {
         
         if (qty === 0) return "qty-available light-red";
         if (qty < 0) return "qty-available strong-red";
-        if (qty >= 1 && qty <= 2) return "qty-available light-yellow";
+        if (qty >= 1 && qty <= 2) return "qty-available light-blue";
         if (qty >= 3 && qty <= 4) return "qty-available light-green";
         if (qty >= 5 && qty <= 7) return "qty-available strong-green";
         if (qty > 7) return "qty-available strong-blue";
@@ -420,9 +429,7 @@ export class DynamicAttributeView extends Component {
     }
     
     showVariantDetails(variant) {
-        console.log('showVariantDetails - variant:', variant);
         if (!variant) {
-            console.log('showVariantDetails - variant is null/undefined');
             return;
         }
         
@@ -431,19 +438,15 @@ export class DynamicAttributeView extends Component {
             this.state.filteredProducts.find(p => p.variants.some(v => v.id === variant.id)) :
             this.state.products.find(p => p.variants.some(v => v.id === variant.id));
             
-        console.log('showVariantDetails - found product:', product);
         
         if (!product) {
-            console.log('showVariantDetails - product not found');
             return;
         }
 
         const attributes = this.formatAttributesForDisplay(variant.attributes);
-        console.log('showVariantDetails - attributes:', attributes);
         const attributesList = attributes.map(attr => attr.value).join(', ');
         
         const qtyField = this.state.config && this.state.config.use_forecast ? 'virtual_available' : 'qty_available';
-        console.log('showVariantDetails - qtyField:', qtyField);
         
         this.state.selectedVariant = {
             product: { name: product.name },
@@ -464,10 +467,8 @@ export class DynamicAttributeView extends Component {
             warehouse_name: variant.warehouse_name || '',
             location_name: variant.location_name || ''
         };
-        console.log('showVariantDetails - selectedVariant:', this.state.selectedVariant);
 
         this.state.showVariantModal = true;
-        console.log('showVariantDetails - modal shown');
     }
     
     formatAttributesForDisplay(attributes) {
@@ -530,12 +531,9 @@ export class DynamicAttributeView extends Component {
     
     groupProductsBySeries(products) {
         const seriesGroups = {};
-        console.log(products, 'product')
         products.forEach(product => {
             const serieId = product.serie_id || 0;
-            console.log(serieId, 'serieId')
             if (!seriesGroups[serieId]) {
-                console.log(product.serie_values, 'product.serie_values but i think hare sere vale avaliabe so we can diract add after ser name')
 
                 seriesGroups[serieId] = {
 
@@ -544,7 +542,6 @@ export class DynamicAttributeView extends Component {
                     serie_values: product.serie_values ? [...new Set(product.serie_values)].sort() : [],
                     products: []
                 };
-                console.log(seriesGroups[serieId], 'seriesGroups[serieId]')
             }
             
             // Add product to the series group
@@ -560,7 +557,6 @@ export class DynamicAttributeView extends Component {
             // Sort serie values
             seriesGroups[serieId].serie_values.sort();
         });
-        console.log(seriesGroups, 'seriesGroups')
         return Object.values(seriesGroups);
     }
     
@@ -791,7 +787,7 @@ export class DynamicAttributeView extends Component {
                         }
                     }
                     
-                    console.log(`Adding combination: Variant ${variant.id}, Color: ${colorValue.name}, Size: ${variantSize}, Location: ${locationData.location_name}, Qty: ${locationData.qty_available}`);
+                    // console.log(`Adding combination: Variant ${variant.id}, Color: ${colorValue.name}, Size: ${variantSize}, Location: ${locationData.location_name}, Qty: ${locationData.qty_available}`);
                     
                     variantLocationCombinations.push({
                         variant: variant,
@@ -846,9 +842,7 @@ export class DynamicAttributeView extends Component {
                 // IMPORTANT: Use the quantity from the specific location data, not from the variant
                 // Make sure we're accessing the correct property from location_data
                 const qty = matchingCombo.locationData[qtyField] || matchingCombo.locationData.qty_available || 0;
-                
-                console.log(`Location: ${matchingCombo.locationData.location_name}, Size: ${sizeValue}, Qty: ${qty}`, matchingCombo.locationData);
-                
+                                
                 return {
                     qty: qty,
                     variant: {
@@ -884,7 +878,6 @@ export class DynamicAttributeView extends Component {
             return 0;
         });
 
-        console.log(rows,'row')
         return {
             rows: rows,
             column_headers: serieValues
@@ -910,24 +903,26 @@ export class DynamicAttributeView extends Component {
             
             const qtyField = this.state.config && this.state.config.use_forecast ? 'virtual_available' : 'qty_available';
             
+            const qty = cell.qty || 0;
+            
             this.state.selectedVariant = {
                 product: { name: product.name },
                 id: variant.id,
                 name: `${product.name} - ${attributesList || variant.default_code || _t('Default')}`,
                 default_code: variant.default_code,
                 image: variant.image_url || product.image_url || this.getRandomProductImage(),
-                qty: variant[qtyField] || 0,
-                qty_on_hand: variant.qty_available || 0,
-                qty_reserved: variant.qty_reserved || 0,
-                qty_incoming: variant.qty_incoming || 0,
-                qty_outgoing: variant.qty_outgoing || 0,
-                virtual_available: variant.virtual_available || 0,
+                qty: qty,
+                qty_on_hand: variant.location_data?.qty_available || 0,
+                qty_reserved: variant.location_data?.qty_reserved || 0,
+                qty_incoming: variant.location_data?.qty_incoming || 0,
+                qty_outgoing: variant.location_data?.qty_outgoing || 0,
+                virtual_available: variant.location_data?.virtual_available || 0,
                 attributes: attributes,
                 attributesList: attributesList || variant.default_code || _t('Default'),
                 quantityClass: this.getVariantCellClass(cell),
                 product_url: variant.product_url || (product ? product.product_url : '#'),
-                warehouse_name: variant.warehouse_name || '',
-                location_name: variant.location_name || ''
+                warehouse_name: variant.location_data?.warehouse_name || '',
+                location_name: variant.location_data?.location_name || ''
             };
 
             this.state.showVariantModal = true;
@@ -969,9 +964,12 @@ export class DynamicAttributeView extends Component {
         if (!cell.variant) return 'o_no_variant_cell';
         if (cell.qty < 0) return 'o_negative_qty_cell';
         if (cell.qty === 0) return 'o_zero_qty_cell';
-        if (cell.qty > 0) return 'o_positive_qty_cell';
+        if (cell.qty === 1 || cell.qty === 2) return 'o_low_qty_cell';
+        if (cell.qty >= 3 && cell.qty <= 100) return 'o_medium_qty_cell';
+        if (cell.qty > 100) return 'o_excess_qty_cell';
         return '';
     }
+
 
     updateProductImage(productId, variantId) {
         const product = this.state.products.find(p => p.id === productId);

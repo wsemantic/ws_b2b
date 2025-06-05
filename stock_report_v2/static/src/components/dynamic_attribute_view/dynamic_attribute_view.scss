@@ -182,9 +182,22 @@
                         }
                         
                         &.o_positive_qty_cell { 
-                            background-color: #c8e6c9; 
+                            background-color: #FFFFB3; 
                             color: #1b5e20; 
                         }
+                        .o_low_qty_cell {
+                            background-color: #FFFFB3 !important;
+                        }
+
+                        .o_medium_qty_cell {
+                            background-color: #C8E6C9 !important;
+                        }
+
+                        .o_excess_qty_cell {
+                            background-color: #33ADFF !important;
+                            color: white;
+                        }
+
                         
                         &.o_empty_cell {
                             background-color: #f0f0f0;
