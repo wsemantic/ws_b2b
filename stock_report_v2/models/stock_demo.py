@@ -37,7 +37,7 @@ class StockDemoSimple(models.TransientModel):
                 
                 # Central (70% probabilidad)
                 if random.random() > 0.3:
-                    qty = random.randint(50, 500)
+                    qty = random.randint(-10, 500)
                     self.env['stock.quant'].create({
                         'product_id': variant.id,
                         'location_id': central.id,
@@ -49,7 +49,7 @@ class StockDemoSimple(models.TransientModel):
                 # Delegaciones
                 for delegacion in delegaciones:
                     if random.random() > 0.3:
-                        qty = random.randint(0, 50)
+                        qty = random.randint(-5, 50)
                         if qty > 0:  # Solo crear si cantidad > 0
                             self.env['stock.quant'].create({
                                 'product_id': variant.id,
